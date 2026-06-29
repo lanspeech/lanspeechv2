@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  /* Duolingo-style 3D press button */
+  .btn-duolingo {
+    @apply relative font-semibold rounded-2xl transition-all duration-100 select-none;
+    box-shadow: 0 4px 0 0 rgba(0, 0, 0, 0.25);
+    transform: translateY(0px);
+  }
+  .btn-duolingo:active {
+    box-shadow: 0 0px 0 0 rgba(0, 0, 0, 0.25);
+    transform: translateY(4px);
+  }
+
+  .btn-duolingo-primary {
+    @apply btn-duolingo bg-emerald-600 hover:bg-emerald-500 text-white;
+    box-shadow: 0 4px 0 0 #14532d;
+  }
+  .btn-duolingo-primary:active {
+    box-shadow: 0 0px 0 0 #14532d;
+  }
+
+  .btn-duolingo-secondary {
+    @apply btn-duolingo bg-slate-100 hover:bg-slate-200 text-gray-700 border border-slate-200;
+    box-shadow: 0 4px 0 0 #cbd5e1;
+  }
+  .btn-duolingo-secondary:active {
+    box-shadow: 0 0px 0 0 #cbd5e1;
+  }
+
+  /* Hover lift for cards */
+  .card-hover {
+    @apply transition-all duration-200;
+  }
+  .card-hover:hover {
+    @apply -translate-y-0.5 shadow-md;
+  }
+
+  /* Smooth icon wiggle on parent hover */
+  .group:hover .icon-wiggle {
+    animation: wiggle 0.4s ease-in-out;
+  }
+
+  /* Staggered children animation helper */
+  .stagger-children > * {
+    @apply animate-fade-in-up opacity-0;
+  }
+  .stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger-children > *:nth-child(2) { animation-delay: 60ms; }
+  .stagger-children > *:nth-child(3) { animation-delay: 120ms; }
+  .stagger-children > *:nth-child(4) { animation-delay: 180ms; }
+  .stagger-children > *:nth-child(5) { animation-delay: 240ms; }
+  .stagger-children > *:nth-child(6) { animation-delay: 300ms; }
+  .stagger-children > *:nth-child(7) { animation-delay: 360ms; }
+  .stagger-children > *:nth-child(8) { animation-delay: 420ms; }
+}
+
+@layer utilities {
+  /* Animated progress bar helper — set --tw-progress-width on element */
+  .animated-bar {
+    animation: bar-grow 0.9s cubic-bezier(0.34, 1.1, 0.64, 1) both;
+  }
+
+  /* Nav transition */
+  .nav-indicator {
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+}
