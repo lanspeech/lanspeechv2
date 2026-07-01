@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { User, Bell, Shield, ChevronRight, Award, Mic, Edit2, Check, Eye, EyeOff, Download, LogOut } from 'lucide-react';
+import { useState } from 'react';
+import { User, Bell, Shield, ChevronRight, Award, Mic, Edit2, Check, Eye, EyeOff, Download, LogOut, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import Toast from '../components/Toast';
@@ -174,7 +174,7 @@ export default function Profile() {
 function SettingRow({
   icon: Icon, label, desc, open, onToggle, border, children,
 }: {
-  icon: React.ComponentType<{ size: number; className?: string }>;
+  icon: LucideIcon;
   label: string; desc: string; open: boolean; onToggle: () => void; border?: boolean;
   children: React.ReactNode;
 }) {
@@ -273,7 +273,6 @@ function AccountSettingsPanel({
   onRefresh: () => Promise<void>;
 }) {
   const [dailyGoal, setDailyGoal] = useState(profile?.daily_goal_mins ?? 20);
-  const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [showNewPw, setShowNewPw] = useState(false);
   const [savingGoal, setSavingGoal] = useState(false);
@@ -299,7 +298,6 @@ function AccountSettingsPanel({
     setSavingPw(false);
     if (error) onError(error.message);
     else {
-      setCurrentPw('');
       setNewPw('');
       onSaved('Password updated successfully!');
     }

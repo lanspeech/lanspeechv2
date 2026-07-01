@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Wind, Repeat2, BookOpen, MessageSquare, Play, Flame, Calendar, CheckCircle, Timer, Award } from 'lucide-react';
+import { Wind, Repeat2, BookOpen, MessageSquare, Play, Flame, Calendar, CheckCircle, Timer, Award, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { computeStats } from '../lib/stats';
+import { fetchLessons } from '../lib/lessons';
 import type { Lesson, PracticeSession, UserStats } from '../lib/types';
 
 interface Props {
@@ -10,15 +11,16 @@ interface Props {
   dataVersion: number;
 }
 
-const practiceTypes = [
-  { icon: Wind, label: 'Breathing' },
-  { icon: Repeat2, label: 'Repeat After Me' },
-  { icon: BookOpen, label: 'Read Aloud' },
-  { icon: MessageSquare, label: 'Speak Freely' },
+const journeySteps = [
+  { icon: Wind, label: 'Breathe', detail: 'Settle your breath and calm your voice' },
+  { icon: Repeat2, label: 'Repeat', detail: 'Mirror the phrase with gentle rhythm' },
+  { icon: BookOpen, label: 'Read', detail: 'Read the line out loud with confidence' },
+  { icon: MessageSquare, label: 'Speak', detail: 'Share your words in your own voice' },
+  { icon: CheckCircle, label: 'Complete', detail: 'Finish the lesson and celebrate' },
 ];
 
 function StatRow({ icon: Icon, label, value, unit, color, delay = 0 }: {
-  icon: React.ComponentType<{ size: number; className?: string }>;
+  icon: LucideIcon;
   label: string; value: string; unit: string; color: string; delay?: number;
 }) {
   return (
@@ -43,6 +45,7 @@ export default function Dashboard({ onStartPractice, dataVersion }: Props) {
   const { user, profile } = useAuth();
   const [stats, setStats] = useState<UserStats | null>(null);
   const [nextLesson, setNextLesson] = useState<Lesson | null>(null);
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [loadingStats, setLoadingStats] = useState(true);
   const [barKey, setBarKey] = useState(0);
 
@@ -67,23 +70,52 @@ export default function Dashboard({ onStartPractice, dataVersion }: Props) {
       ]);
 
       const completedIds = new Set((completions ?? []).map(c => c.lesson_id));
+      const lessons = await fetchLessons();
+      const lessonIds = new Set(lessons.map(lesson => lesson.id));
+      const completedCurrentLessons = [...completedIds].filter(id => lessonIds.has(id)).length;
       const computed = computeStats(
         (sessions ?? []) as PracticeSession[],
-        completedIds.size,
+        completedCurrentLessons,
         profile.daily_goal_mins
       );
       setStats(computed);
 
-      const { data: lessons } = await supabase
-        .from('lessons')
-        .select('*')
-        .eq('is_bonus', false)
-        .order('order_index');
-      if (lessons) {
-        for (const l of lessons) {
-          if (!completedIds.has(l.id)) { setNextLesson(l as Lesson); break; }
+      const pendingLessons = lessons.filter(l => !completedIds.has(l.id));
+
+      let selectedLesson = pendingLessons[0] ?? lessons[0] ?? null;
+      let savedStep = 0;
+
+      if (selectedLesson) {
+        const savedProgress = pendingLessons
+          .map(lesson => {
+            const saved = localStorage.getItem(`lesson-progress-${lesson.id}`);
+            if (!saved) return null;
+            try {
+              const parsed = JSON.parse(saved) as { lessonId: string; exerciseIndex: number; updatedAt: string };
+              if (parsed.lessonId === lesson.id && Number.isFinite(parsed.exerciseIndex)) {
+                const exerciseCount = lesson.exercises?.length ?? 0;
+                return {
+                  lesson,
+                  exerciseIndex: Math.min(Math.max(0, parsed.exerciseIndex), Math.max(0, exerciseCount - 1)),
+                  updatedAt: new Date(parsed.updatedAt),
+                };
+              }
+            } catch {
+              return null;
+            }
+            return null;
+          })
+          .filter(Boolean) as Array<{ lesson: Lesson; exerciseIndex: number; updatedAt: Date }>;
+
+        if (savedProgress.length > 0) {
+          savedProgress.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+          selectedLesson = savedProgress[0].lesson;
+          savedStep = savedProgress[0].exerciseIndex;
         }
       }
+
+      setNextLesson(selectedLesson);
+      setCurrentExerciseIndex(savedStep);
       setLoadingStats(false);
       setBarKey(k => k + 1);
     };
@@ -97,19 +129,17 @@ export default function Dashboard({ onStartPractice, dataVersion }: Props) {
   const remaining = stats ? Math.max(0, stats.dailyGoalMins - stats.todayMinutes) : 0;
 
   return (
-    <div className="flex-1 bg-slate-50 min-h-screen p-8 overflow-y-auto">
+    <div className="flex-1 bg-slate-50 min-h-screen p-4 sm:p-8 overflow-y-auto">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8 animate-fade-in-up" style={{ animationDelay: '0ms' }}>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">
             Welcome back {profile?.display_name ? profile.display_name.split(' ')[0] : ''} <span>👋</span>
           </h1>
-          <p className="text-gray-500">Ready for your daily gentle practice?</p>
+          <p className="text-gray-500">Ready for your first calm practice? This journey is built for stammerers with gentle pacing and support.</p>
         </div>
 
-        <div className="flex gap-6">
-          {/* Left column */}
-          <div className="flex-1 flex flex-col gap-5 min-w-0">
-            {/* Today's Practice */}
+        <div className="flex flex-col gap-6 lg:flex-row">
+          <div className="flex-1">
             <div
               className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 animate-fade-in-up opacity-0"
               style={{ animationDelay: '80ms' }}
@@ -117,27 +147,48 @@ export default function Dashboard({ onStartPractice, dataVersion }: Props) {
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <h2 className="text-lg font-semibold text-emerald-700">Today's Practice</h2>
-                  <p className="text-sm text-gray-500 mt-0.5">Approx. 15 minutes to complete</p>
+                  <p className="text-sm text-gray-500 mt-0.5">A calm, guided lesson designed for stammerers: gentle starts, slow pace, and steady support.</p>
                 </div>
                 <span className="bg-emerald-500 text-white text-xs font-semibold px-3 py-1 rounded-full animate-pop-in" style={{ animationDelay: '300ms' }}>
-                  Recommended
+                  New Journey
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mt-5 mb-5">
-                {practiceTypes.map(({ icon: Icon, label }, i) => (
-                  <button
-                    key={label}
-                    onClick={() => onStartPractice(nextLesson)}
-                    className="group flex items-center gap-3 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-200 active:scale-95 rounded-2xl px-4 py-4 transition-all duration-150 border border-slate-100 text-left animate-fade-in-up opacity-0"
-                    style={{ animationDelay: `${160 + i * 50}ms` }}
-                  >
-                    <div className="w-9 h-9 rounded-xl bg-white shadow-sm flex items-center justify-center group-hover:shadow-md group-hover:scale-110 transition-all duration-200">
-                      <Icon size={18} className="text-emerald-600 icon-wiggle" />
-                    </div>
-                    <span className="text-sm font-medium text-gray-700">{label}</span>
-                  </button>
-                ))}
+              <div className="rounded-3xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-4 mt-5 mb-5 animate-fade-in-up opacity-0" style={{ animationDelay: '160ms' }}>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.2em] font-semibold text-emerald-700">Lesson Journey</p>
+                    <h3 className="text-base font-semibold text-gray-900 mt-1">{nextLesson?.title ?? 'Your next practice lesson'}</h3>
+                    <p className="text-sm text-gray-500 mt-1">{nextLesson?.description ?? 'Each lesson is broken into small wins so progress feels rewarding.'}</p>
+                  </div>
+                  <div className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-semibold text-white whitespace-nowrap">
+                    Step {Math.min(currentExerciseIndex + 1, journeySteps.length)} of {journeySteps.length}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {journeySteps.map(({ icon: Icon, label, detail }, i) => {
+                    const currentStep = Math.min(currentExerciseIndex, journeySteps.length - 2);
+                    const isCurrent = i === currentStep;
+                    return (
+                      <div
+                        key={label}
+                        className={`flex items-center gap-3 rounded-2xl border px-3 py-3 transition-all ${isCurrent ? 'border-emerald-200 bg-white shadow-sm' : i < currentStep ? 'border-emerald-100 bg-emerald-50/80' : 'border-transparent bg-emerald-50/70'}`}
+                      >
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isCurrent ? 'bg-emerald-600 text-white' : 'bg-white text-emerald-600 border border-emerald-100'}`}>
+                          <Icon size={16} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-800">{label}</p>
+                          <p className="text-xs text-gray-500 truncate">{detail}</p>
+                        </div>
+                        <span className={`text-[11px] font-semibold uppercase tracking-wide ${isCurrent ? 'text-emerald-700' : i < currentStep ? 'text-emerald-600' : 'text-gray-400'}`}>
+                          {isCurrent ? 'Now' : i === journeySteps.length - 1 ? 'Finish' : 'Next'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               <button
@@ -146,11 +197,10 @@ export default function Dashboard({ onStartPractice, dataVersion }: Props) {
                 style={{ animationDelay: '380ms' }}
               >
                 <Play size={16} fill="white" />
-                Start Practice
+                Continue Lesson
               </button>
             </div>
 
-            {/* Achievement / streak banner */}
             <div
               className="bg-gray-50 rounded-2xl p-5 flex items-center gap-4 border border-gray-100 animate-slide-in-left opacity-0"
               style={{ animationDelay: '200ms' }}
@@ -161,12 +211,8 @@ export default function Dashboard({ onStartPractice, dataVersion }: Props) {
               <div>
                 {stats && stats.currentStreak > 0 ? (
                   <>
-                    <p className="font-semibold text-gray-800">
-                      Great Progress, {profile?.display_name?.split(' ')[0] ?? 'you'}!
-                    </p>
-                    <p className="text-sm text-gray-500 mt-0.5">
-                      You've reached a {stats.currentStreak}-day streak. Your consistency is building confidence. Keep it up!
-                    </p>
+                    <p className="font-semibold text-gray-800">Great Progress, {profile?.display_name?.split(' ')[0] ?? 'you'}!</p>
+                    <p className="text-sm text-gray-500 mt-0.5">You've reached a {stats.currentStreak}-day streak. Your consistency is building confidence. Keep it up!</p>
                   </>
                 ) : (
                   <>
@@ -178,9 +224,7 @@ export default function Dashboard({ onStartPractice, dataVersion }: Props) {
             </div>
           </div>
 
-          {/* Right column */}
-          <div className="w-64 shrink-0 flex flex-col gap-5">
-            {/* Stats */}
+          <div className="w-full lg:w-64 shrink-0 flex flex-col gap-5">
             <div
               className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 animate-fade-in-up opacity-0"
               style={{ animationDelay: '120ms' }}
@@ -202,16 +246,13 @@ export default function Dashboard({ onStartPractice, dataVersion }: Props) {
               )}
             </div>
 
-            {/* Daily Goal */}
             <div
               className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 animate-fade-in-up opacity-0"
               style={{ animationDelay: '200ms' }}
             >
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold text-gray-900">Daily Goal</h3>
-                <span className="text-emerald-600 text-sm font-medium">
-                  {stats?.todayMinutes ?? 0}/{profile?.daily_goal_mins ?? 20}m
-                </span>
+                <span className="text-emerald-600 text-sm font-medium">{stats?.todayMinutes ?? 0}/{profile?.daily_goal_mins ?? 20}m</span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2.5 mb-2 overflow-hidden">
                 <div
@@ -229,7 +270,6 @@ export default function Dashboard({ onStartPractice, dataVersion }: Props) {
               </p>
             </div>
 
-            {/* Connected Specialist */}
             <div
               className="bg-emerald-800 rounded-2xl p-5 text-white animate-fade-in-up opacity-0 hover:bg-emerald-700 transition-colors cursor-pointer"
               style={{ animationDelay: '280ms' }}
@@ -237,17 +277,12 @@ export default function Dashboard({ onStartPractice, dataVersion }: Props) {
               <p className="text-xs text-emerald-300 mb-1">Connected Specialist</p>
               <div className="flex items-center gap-3 mt-2">
                 <img
-                  src={
-                    profile?.specialist_photo_url ??
-                    'https://images.pexels.com/photos/5327580/pexels-photo-5327580.jpeg?auto=compress&cs=tinysrgb&w=80&h=80&fit=crop'
-                  }
+                  src={profile?.specialist_photo_url ?? 'https://images.pexels.com/photos/5327580/pexels-photo-5327580.jpeg?auto=compress&cs=tinysrgb&w=80&h=80&fit=crop'}
                   alt={profile?.specialist_name ?? 'Specialist'}
                   className="w-12 h-12 rounded-full object-cover border-2 border-emerald-600 hover:scale-105 transition-transform"
                 />
                 <div>
-                  <p className="font-bold text-base leading-tight">
-                    {profile?.specialist_name ?? 'Dr. Sarah Chen'}
-                  </p>
+                  <p className="font-bold text-base leading-tight">{profile?.specialist_name ?? 'Dr. Sarah Chen'}</p>
                 </div>
               </div>
             </div>

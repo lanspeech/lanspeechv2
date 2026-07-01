@@ -15,8 +15,8 @@ export default function Toast({ message, type = 'success', onDone, duration = 28
   }, [onDone, duration]);
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] animate-bounce-in">
-      <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl shadow-xl text-sm font-medium ${
+    <div className="fixed bottom-6 left-4 right-4 mx-auto z-[60] animate-bounce-in sm:left-1/2 sm:right-auto sm:-translate-x-1/2">
+      <div className={`mx-auto max-w-xl flex items-center gap-3 px-5 py-3 rounded-2xl shadow-xl text-sm font-medium ${
         type === 'success'
           ? 'bg-emerald-700 text-white'
           : 'bg-red-600 text-white'

@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { LayoutDashboard, BookOpen, TrendingUp, User, HelpCircle, LogOut, Leaf, Mail, MessageCircle, Send } from 'lucide-react';
+import { LayoutDashboard, BookOpen, TrendingUp, User, HelpCircle, LogOut, Leaf, Mail, Send } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Modal from './Modal';
 import Toast from './Toast';
 
-type Page = 'dashboard' | 'library' | 'progress' | 'profile';
+export type Page = 'dashboard' | 'library' | 'progress' | 'profile' | 'admin' | 'debug';
 
 interface SidebarProps {
   currentPage: Page;
@@ -18,6 +18,7 @@ const navItems = [
   { id: 'library' as Page, label: 'Library', icon: BookOpen },
   { id: 'progress' as Page, label: 'Progress', icon: TrendingUp },
   { id: 'profile' as Page, label: 'Profile', icon: User },
+  { id: 'admin' as Page, label: 'Admin', icon: LayoutDashboard },
 ];
 
 function SupportModal({ onClose }: { onClose: () => void }) {
@@ -76,7 +77,7 @@ function SupportModal({ onClose }: { onClose: () => void }) {
           <textarea
             value={message}
             onChange={e => setMessage(e.target.value)}
-            placeholder="Describe your question or issue..."
+            placeholder="Describe how we can improve practice for stammerers..."
             rows={4}
             className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
           />
@@ -102,12 +103,17 @@ function SupportModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-export default function Sidebar({ currentPage, onNavigate, onStartPractice, showStartPractice }: SidebarProps) {
+interface SidebarPropsExtended extends SidebarProps {
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
+}
+
+export default function Sidebar({ currentPage, onNavigate, onStartPractice, showStartPractice, mobileOpen, onCloseMobile }: SidebarPropsExtended) {
   const { profile, signOut } = useAuth();
   const [showSupport, setShowSupport] = useState(false);
 
-  return (
-    <aside className="w-56 min-h-screen bg-white flex flex-col py-8 px-4 border-r border-gray-100 shrink-0">
+  const renderContent = () => (
+    <div className="flex flex-col h-full">
       {showSupport && <SupportModal onClose={() => setShowSupport(false)} />}
       {/* Logo */}
       <div className="mb-10 animate-slide-in-left opacity-0" style={{ animationDelay: '0ms' }}>
@@ -123,11 +129,12 @@ export default function Sidebar({ currentPage, onNavigate, onStartPractice, show
       {/* Nav */}
       <nav className="flex flex-col gap-1 flex-1">
         {navItems.map(({ id, label, icon: Icon }, i) => {
+          if (id === 'admin' && !profile?.is_admin) return null;
           const active = currentPage === id;
           return (
             <button
               key={id}
-              onClick={() => onNavigate(id)}
+              onClick={() => { onNavigate(id); onCloseMobile?.(); }}
               className={`group flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 w-full text-left animate-slide-in-left opacity-0 ${
                 active
                   ? 'bg-emerald-100 text-emerald-700 scale-[1.02]'
@@ -152,10 +159,21 @@ export default function Sidebar({ currentPage, onNavigate, onStartPractice, show
         })}
       </nav>
 
+      {import.meta.env.DEV && (
+        <div className="mt-3 px-4">
+          <button
+            onClick={() => { onNavigate('debug' as Page); onCloseMobile?.(); }}
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+          >
+            Debug
+          </button>
+        </div>
+      )}
+
       {/* Start Practice button */}
       {showStartPractice && onStartPractice && (
         <button
-          onClick={onStartPractice}
+          onClick={() => { onStartPractice(); onCloseMobile?.(); }}
           className="btn-duolingo-primary flex items-center justify-center gap-2 py-3 px-4 rounded-2xl mb-6 animate-pop-in opacity-0 text-sm font-semibold"
           style={{ animationDelay: '300ms' }}
         >
@@ -190,6 +208,24 @@ export default function Sidebar({ currentPage, onNavigate, onStartPractice, show
           Sign Out
         </button>
       </div>
-    </aside>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 md:hidden" onClick={e => { if (e.target === e.currentTarget) onCloseMobile?.(); }}>
+          <div className="w-72 bg-white h-full p-4">
+            {renderContent()}
+          </div>
+        </div>
+      )}
+
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex md:w-56 min-h-screen bg-white flex-col py-8 px-4 border-r border-gray-100 shrink-0">
+        {renderContent()}
+      </aside>
+    </>
   );
 }

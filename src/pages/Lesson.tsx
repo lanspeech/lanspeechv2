@@ -1,32 +1,34 @@
-import { X, Play, Mic, Lightbulb, Shield, Flame, Volume2 } from 'lucide-react';
+import { X, Play, Lightbulb, Shield, Volume2, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
-import type { Lesson as LessonType } from '../lib/types';
+import type { Lesson as LessonType, PracticeSession } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+import { computeStats } from '../lib/stats';
+import { useMicrophoneRecording } from '../hooks/useMicrophoneRecording';
+import { fetchLessons, fetchUnitLessons } from '../lib/lessons';
 
 interface Props {
   lesson: LessonType | null;
   onClose: () => void;
   onComplete: (durationMins: number) => void;
+  onAdvance: (durationMins: number) => void;
 }
 
-const DEFAULT_PHRASE = '"Take a deep breath and speak with confidence."';
-
 const TIPS = [
-  "Take a deep breath before you start. It's okay to pause between words.",
+  'Take a deep breath before you start. It is okay to pause between words.',
   'Speak at a comfortable pace — clarity matters more than speed.',
-  'If you stumble, that\'s perfectly fine. Simply restart the phrase.',
-  'Focus on smooth airflow. Let the words ride on your breath.',
-  'Relax your jaw and lips before each attempt. You\'re doing great!',
+  'If you stumble, that is perfectly fine. Simply restart the phrase.',
+  'Your practice is for stammerers — every gentle attempt is progress.',
+  'Relax your jaw and lips before each attempt. You are doing great!',
 ];
 
 function useSpeech(phrase: string) {
   const [speaking, setSpeaking] = useState(false);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const speak = () => {
-    if (!('speechSynthesis' in window)) return;
+    if (!('speechSynthesis' in window) || !phrase) return;
     window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(phrase.replace(/["""]/g, ''));
+    const utt = new SpeechSynthesisUtterance(phrase);
     utt.rate = 0.82;
     utt.pitch = 1.0;
     utt.lang = 'en-US';
@@ -39,7 +41,6 @@ function useSpeech(phrase: string) {
     utt.onstart = () => setSpeaking(true);
     utt.onend = () => setSpeaking(false);
     utt.onerror = () => setSpeaking(false);
-    utteranceRef.current = utt;
     window.speechSynthesis.speak(utt);
   };
 
@@ -53,40 +54,127 @@ function useSpeech(phrase: string) {
   return { speaking, speak, stop };
 }
 
-export default function Lesson({ lesson, onClose, onComplete }: Props) {
-  const { profile } = useAuth();
+export default function Lesson({ lesson, onClose, onComplete, onAdvance }: Props) {
+  const { user, profile } = useAuth();
   const sessionStart = useRef(Date.now());
-  const phrase = lesson?.practice_phrase ?? DEFAULT_PHRASE;
-  const { speaking, speak, stop } = useSpeech(phrase);
-  const [pitchH, setPitchH] = useState(40);
-  const [clarityH, setClarityH] = useState(55);
-  const [bar2H, setBar2H] = useState(25);
-  const [bar4H, setBar4H] = useState(35);
-  const [attempts, setAttempts] = useState(0);
+  const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
   const [justDone, setJustDone] = useState(false);
-  const tipIdx = attempts % TIPS.length;
+  const [currentStreak, setCurrentStreak] = useState(0);
+  const [lessonCount, setLessonCount] = useState(3);
+  const [isFinalUnitLesson, setIsFinalUnitLesson] = useState(false);
+  const exercises = lesson?.exercises ?? [];
+  const defaultExercise = {
+    id: 'general-practice',
+    title: lesson ? 'Warm-up' : 'General Practice',
+    description: lesson
+      ? 'Follow the steps slowly and stay relaxed.'
+      : 'Record a short practice to build confidence in your own voice.',
+    speakText: lesson?.practice_phrase ?? 'Take a deep breath and speak when you are ready.',
+  };
+  const currentExercise = exercises[activeExerciseIndex] ?? defaultExercise;
+  const { speaking, speak, stop } = useSpeech(currentExercise.speakText ?? '');
+  const { recording, audioUrl, recordingSaved, loading, error, startRecording, stopRecording, clearRecording } = useMicrophoneRecording({
+    lessonId: lesson?.id,
+    exerciseId: currentExercise.id,
+    userId: user?.id,
+  });
+  const progressStorageKey = lesson ? `lesson-progress-${lesson.id}` : null;
 
   useEffect(() => {
-    let id: ReturnType<typeof setInterval>;
-    if (speaking) {
-      id = setInterval(() => {
-        setPitchH(25 + Math.random() * 55);
-        setClarityH(30 + Math.random() * 50);
-        setBar2H(15 + Math.random() * 40);
-        setBar4H(20 + Math.random() * 45);
-      }, 180);
+    if (!lesson) return;
+    const saved = progressStorageKey ? localStorage.getItem(progressStorageKey) : null;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as { lessonId: string; exerciseIndex: number };
+        if (parsed.lessonId === lesson.id && Number.isFinite(parsed.exerciseIndex)) {
+          setActiveExerciseIndex(Math.min(Math.max(0, parsed.exerciseIndex), exercises.length - 1));
+        }
+      } catch {
+        // ignore invalid progress data
+      }
     } else {
-      setPitchH(40);
-      setClarityH(55);
-      setBar2H(25);
-      setBar4H(35);
+      setActiveExerciseIndex(0);
     }
-    return () => clearInterval(id);
-  }, [speaking]);
+    sessionStart.current = Date.now();
+  }, [lesson, progressStorageKey, exercises.length]);
 
-  const handlePlay = () => speaking ? stop() : speak();
+  useEffect(() => {
+    if (!lesson || progressStorageKey == null) return;
+    localStorage.setItem(
+      progressStorageKey,
+      JSON.stringify({ lessonId: lesson.id, exerciseIndex: activeExerciseIndex, updatedAt: new Date().toISOString() })
+    );
+  }, [lesson, progressStorageKey, activeExerciseIndex]);
+
+  useEffect(() => {
+    if (!user || !profile) return;
+    const loadLessonStats = async () => {
+      const [{ data: sessions }, { data: completions }, lessons] = await Promise.all([
+        supabase.from('practice_sessions').select('*').eq('user_id', user.id),
+        supabase.from('lesson_completions').select('lesson_id').eq('user_id', user.id),
+        fetchLessons(),
+      ]);
+
+      const lessonIds = new Set(lessons.map(item => item.id));
+      const completedCount = (completions ?? []).filter(item => lessonIds.has(item.lesson_id)).length;
+      setLessonCount(lessons.length || 1);
+      const stats = computeStats((sessions ?? []) as PracticeSession[], completedCount, profile.daily_goal_mins);
+      setCurrentStreak(stats.currentStreak);
+    };
+    loadLessonStats();
+  }, [user, profile]);
+
+  useEffect(() => {
+    if (!lesson?.unit_id) {
+      setIsFinalUnitLesson(true);
+      return;
+    }
+
+    fetchUnitLessons(lesson.unit_id)
+      .then(unitLessons => {
+        setIsFinalUnitLesson(unitLessons[unitLessons.length - 1]?.id === lesson.id);
+      })
+      .catch(() => setIsFinalUnitLesson(false));
+  }, [lesson]);
+
+  useEffect(() => {
+    stop();
+  }, [activeExerciseIndex, stop]);
+
+  const clearSavedProgress = () => {
+    if (progressStorageKey) {
+      localStorage.removeItem(progressStorageKey);
+    }
+  };
+
+  const handleClose = async () => {
+    if (recording) {
+      await stopRecording();
+    }
+    clearSavedProgress();
+    window.speechSynthesis.cancel();
+    onClose();
+  };
+
+  const handlePlay = () => (speaking ? stop() : speak());
+
+  const playRecordedAudio = () => {
+    if (!audioUrl) return;
+    const audio = new Audio(audioUrl);
+    audio.play().catch(() => undefined);
+  };
+
+  const handleContinue = async () => {
+    await clearRecording();
+    if (activeExerciseIndex < exercises.length - 1) {
+      setActiveExerciseIndex(i => i + 1);
+    } else {
+      handleDone();
+    }
+  };
 
   const handleDone = () => {
+    clearSavedProgress();
     setJustDone(true);
     window.speechSynthesis.cancel();
     setTimeout(() => {
@@ -95,175 +183,192 @@ export default function Lesson({ lesson, onClose, onComplete }: Props) {
     }, 300);
   };
 
-  const handleTryAgain = () => {
-    stop();
-    setPitchH(40);
-    setClarityH(55);
-    setAttempts(a => a + 1);
-  };
-
-  const progressPct = Math.min(100, attempts * 20 + 20);
-  const streak = profile?.daily_goal_mins ?? 0;
+  const lessonProgressPct = lesson ? Math.min(100, Math.round(((lesson.order_index ?? lesson.day_number) / lessonCount) * 100)) : 0;
 
   return (
     <div className={`min-h-screen bg-slate-100 flex flex-col transition-opacity duration-300 ${justDone ? 'opacity-0' : 'opacity-100'}`}>
-      {/* Header */}
-      <header className="bg-white border-b border-gray-100 px-6 py-3 flex items-center gap-6 animate-fade-in">
-        <button
-          onClick={() => { window.speechSynthesis.cancel(); onClose(); }}
-          className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 hover:scale-110 active:scale-90 transition-all duration-150"
-        >
+      <header className="bg-white border-b border-gray-100 px-4 sm:px-6 py-3 flex flex-col sm:flex-row items-center gap-4 sm:gap-6 animate-fade-in">
+        <button onClick={() => { void handleClose(); }} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 hover:scale-110 active:scale-90 transition-all duration-150">
           <X size={18} className="text-gray-500" />
         </button>
-
         <div className="flex-shrink-0">
-          <p className="font-bold text-emerald-700 text-base leading-tight">
-            {lesson?.title ?? 'Practice Session'}
-          </p>
-          <p className="text-xs text-gray-500">{lesson?.module ?? 'Free Practice'}</p>
+          <p className="font-bold text-emerald-700 text-base leading-tight">{lesson?.title ?? 'Practice Session'}</p>
+          <p className="text-xs text-gray-500">{lesson?.unit_title ?? lesson?.module ?? 'Unit 1'}</p>
+          <p className="text-xs text-gray-500 mt-1">This lesson is designed for stammerers: take your time and use each pause as a reset.</p>
         </div>
-
         <div className="flex-1 flex items-center gap-3">
           <span className="text-xs text-gray-500 whitespace-nowrap">Lesson Progress</span>
           <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-            <div
-              className="bg-emerald-700 h-2 rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${progressPct}%` }}
-            />
+            <div className="bg-emerald-700 h-2 rounded-full transition-all duration-500 ease-out" style={{ width: `${lessonProgressPct}%` }} />
           </div>
-          <span className="text-sm font-semibold text-gray-700 tabular-nums">{progressPct}%</span>
+          <span className="text-sm font-semibold text-gray-700 tabular-nums">{lessonProgressPct}%</span>
         </div>
-
         <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1.5 ml-2">
-          <Flame size={16} className="text-emerald-600 animate-heart-beat" />
-          <span className="text-sm font-bold text-emerald-700">{streak}</span>
+          <span className="text-sm font-bold text-emerald-700">{currentStreak} days</span>
         </div>
       </header>
 
-      {/* Main content */}
       <main className="flex-1 flex flex-col items-center justify-center p-6">
-        <div className="bg-white rounded-3xl shadow-md p-10 w-full max-w-xl flex flex-col items-center gap-6 animate-fade-in-up opacity-0" style={{ animationDelay: '100ms' }}>
-          {/* Speaker icon */}
-          <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center animate-float">
-            <svg viewBox="0 0 24 24" className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={1.5}>
-              <circle cx="12" cy="8" r="4" />
-              <path d="M6 20v-1a6 6 0 0112 0v1" />
-              <path d="M19 8c1 0 2 1.5 2 3s-1 3-2 3" strokeLinecap="round" />
-            </svg>
+        <div className="w-full max-w-3xl bg-white rounded-3xl shadow-md p-8 animate-fade-in-up">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.25em] text-emerald-700 font-semibold">{lesson?.unit_title ?? 'Unit 1'}</p>
+              <h2 className="text-2xl font-semibold text-gray-900 mt-1">{lesson?.goal ?? lesson?.description ?? 'Calm speaking practice'}</h2>
+            </div>
+            <div className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">{activeExerciseIndex + 1}/{Math.max(1, exercises.length)}</div>
           </div>
+          {lesson?.coachTip && (
+            <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-gray-700">
+              <p className="font-semibold text-emerald-700 mb-1">Coach&apos;s Tip</p>
+              <p>{lesson.coachTip}</p>
+            </div>
+          )}
 
-          <p className="text-xs font-bold tracking-[0.15em] text-emerald-600 uppercase animate-fade-in opacity-0" style={{ animationDelay: '200ms' }}>
-            Listen and Repeat
-          </p>
+          {lesson?.techniqueReminders?.length ? (
+            <div className="mb-4 rounded-2xl border border-emerald-200 bg-white p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Lightbulb size={16} className="text-emerald-600" />
+                <p className="text-sm font-semibold text-emerald-700">Technique reminder</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {lesson.techniqueReminders.map(reminder => (
+                  <span key={reminder} className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-sm text-emerald-700">
+                    {reminder}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
-          <h2
-            className="text-2xl font-bold text-gray-900 text-center leading-tight animate-fade-in-up opacity-0"
-            style={{ animationDelay: '250ms' }}
-          >
-            {phrase}
-          </h2>
-
-          {/* Play button with ring pulse */}
-          <div className="flex flex-col items-center gap-2 animate-fade-in opacity-0" style={{ animationDelay: '350ms' }}>
-            <div className="relative flex items-center justify-center">
-              {/* Pulsing rings when speaking */}
-              {speaking && (
-                <>
-                  <span className="absolute w-16 h-16 rounded-full bg-emerald-400 animate-ring-pulse" />
-                  <span className="absolute w-16 h-16 rounded-full bg-emerald-400 animate-ring-pulse" style={{ animationDelay: '0.4s' }} />
-                </>
-              )}
-              <button
-                onClick={handlePlay}
-                className={`relative z-10 w-16 h-16 rounded-full flex items-center justify-center transition-all duration-150 shadow-md active:scale-90 ${
-                  speaking
-                    ? 'bg-emerald-600 scale-95'
-                    : 'bg-emerald-500 hover:bg-emerald-600 hover:scale-110'
-                }`}
-              >
-                {speaking ? (
-                  <div className="flex gap-1">
-                    <div className="w-1.5 h-5 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '0.6s' }} />
-                    <div className="w-1.5 h-5 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.15s', animationDuration: '0.6s' }} />
-                    <div className="w-1.5 h-5 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.3s', animationDuration: '0.6s' }} />
-                  </div>
-                ) : (
-                  <Play size={24} fill="white" className="text-white ml-1" />
-                )}
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-5 mb-6">
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Exercise {activeExerciseIndex + 1}</p>
+                <h3 className="text-xl font-semibold text-gray-900 mt-1">{currentExercise?.title ?? 'Warm-up'}</h3>
+              </div>
+              <button onClick={handlePlay} className="rounded-full bg-emerald-600 p-3 text-white shadow-sm">
+                <Play size={16} fill="white" />
               </button>
             </div>
-            <div className="flex items-center gap-1 text-xs text-gray-400 italic">
+            <p className="text-sm text-gray-600">{currentExercise?.description ?? 'Follow the steps slowly and stay relaxed.'}</p>
+          </div>
+
+          <div className="rounded-2xl border border-gray-100 p-5 mb-6">
+            {currentExercise?.kind === 'breathing' && (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-gray-800">Instructions</p>
+                <ul className="list-disc pl-5 text-sm text-gray-600 space-y-2">
+                  {currentExercise.instructions?.map(step => <li key={step}>{step}</li>)}
+                </ul>
+                {currentExercise.repeatCount && <p className="text-sm text-emerald-700 font-semibold">Repeat {currentExercise.repeatCount} times</p>}
+              </div>
+            )}
+
+            {currentExercise?.kind === 'repeat' && (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-gray-800">Repeat each phrase slowly</p>
+                <div className="flex flex-wrap gap-2">
+                  {currentExercise.phrases?.map(text => <span key={text} className="rounded-full bg-slate-100 px-3 py-1 text-sm text-gray-700">{text}</span>)}
+                </div>
+                {currentExercise.repeatCount && <p className="text-sm text-emerald-700 font-semibold">Repeat each phrase {currentExercise.repeatCount} times</p>}
+              </div>
+            )}
+
+            {currentExercise?.kind === 'reading' && (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-gray-800">Read this passage</p>
+                <blockquote className="rounded-2xl bg-slate-50 p-4 text-sm text-gray-700 leading-relaxed">{currentExercise.readText}</blockquote>
+                {currentExercise.durationHint && <p className="text-sm text-emerald-700 font-semibold">{currentExercise.durationHint}</p>}
+              </div>
+            )}
+
+            {currentExercise?.kind === 'conversation' && (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-gray-800">Conversation challenge</p>
+                <p className="text-sm text-gray-700 leading-relaxed">{currentExercise.prompt}</p>
+                {currentExercise.durationHint && <p className="text-sm text-emerald-700 font-semibold">{currentExercise.durationHint}</p>}
+              </div>
+            )}
+
+            {currentExercise?.kind === 'reflection' && (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-gray-800">Reflection</p>
+                <p className="text-sm text-gray-700 leading-relaxed">{lesson?.reflection_prompt ?? currentExercise.description}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between mb-6">
+            <button onClick={() => setActiveExerciseIndex(i => Math.max(0, i - 1))} className="flex items-center gap-2 rounded-full border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700">
+              <ArrowLeft size={14} /> Previous
+            </button>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
               <Volume2 size={12} />
-              <span>Listen to the correct pronunciation</span>
+              <span>{speaking ? 'Listening...' : 'Tap play to hear the cue'}</span>
+            </div>
+            <button onClick={() => setActiveExerciseIndex(i => Math.min(exercises.length - 1, i + 1))} className="flex items-center gap-2 rounded-full bg-emerald-700 px-3 py-2 text-sm font-semibold text-white">
+              Next <ArrowRight size={14} />
+            </button>
+          </div>
+
+          <div className="flex gap-3 mb-4">
+            {!isFinalUnitLesson ? (
+              <button
+                onClick={() => {
+                  clearSavedProgress();
+                  const mins = Math.max(1, Math.round((Date.now() - sessionStart.current) / 60000));
+                  onAdvance(mins);
+                }}
+                className="btn-duolingo-primary flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl"
+              >
+                Next Lesson
+              </button>
+            ) : (
+              <button onClick={handleDone} className="btn-duolingo-primary flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl">I’m done</button>
+            )}
+            <button onClick={async () => { if (recording) await stopRecording(); else await startRecording(); }} disabled={loading} className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl font-semibold transition-all ${recording ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'} ${loading ? 'opacity-60 cursor-not-allowed' : ''}`}>
+              {loading ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving...</> : recording ? 'Stop Recording' : 'Record Yourself'}
+            </button>
+          </div>
+
+          {recordingSaved && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 mb-4">
+              <h4 className="text-sm font-semibold text-emerald-700">🎤 Recording saved</h4>
+              <p className="text-sm text-gray-700 mt-2">
+                Your voice recording has been saved. You can listen to it before continuing. Our human speech therapists will review your recording and provide personalized feedback.
+              </p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <button onClick={playRecordedAudio} className="rounded-full bg-emerald-700 px-3 py-2 text-sm font-semibold text-white">▶️ Listen</button>
+                <button onClick={() => { void (async () => { await clearRecording(); await startRecording(); })(); }} disabled={loading} className="rounded-full border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 disabled:opacity-60">🔁 Record Again</button>
+                <button onClick={() => { void handleContinue(); }} disabled={loading || !recordingSaved} className="rounded-full border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 disabled:opacity-60">Continue</button>
+              </div>
+            </div>
+          )}
+
+          {error && <div className="rounded-2xl p-4 border bg-red-50 border-red-200 mb-4">
+            <p className="text-sm text-red-700">{error}</p>
+          </div>}
+
+          <div className="mt-5 rounded-2xl bg-white border border-gray-100 p-4 flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+              <Lightbulb size={18} className="text-emerald-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-emerald-700 text-sm">Friendly reminder</p>
+              <p className="text-sm text-gray-600 leading-relaxed">{TIPS[(activeExerciseIndex + currentStreak) % TIPS.length]}</p>
             </div>
           </div>
 
-          <div className="w-full h-px bg-gray-100" />
-
-          {/* Waveform meters */}
-          <div className="flex items-end justify-center gap-8 animate-fade-in opacity-0" style={{ animationDelay: '400ms' }}>
-            {[
-              { label: 'Pitch', bars: [pitchH, bar2H, Math.max(20, pitchH - 15)] },
-              { label: 'Clarity', bars: [clarityH, bar4H, Math.max(20, clarityH - 10)] },
-            ].map(({ label, bars }) => (
-              <div key={label} className="flex flex-col items-center gap-2">
-                <div className="flex items-end gap-0.5" style={{ height: 64 }}>
-                  {bars.map((h, i) => (
-                    <div
-                      key={i}
-                      className={`rounded-t-full transition-all ${i % 2 === 0 ? 'w-2 bg-emerald-500' : 'w-1.5 bg-emerald-300'}`}
-                      style={{
-                        height: `${h}%`,
-                        transitionDuration: `${130 + i * 40}ms`,
-                        transitionTimingFunction: 'ease-out',
-                      }}
-                    />
-                  ))}
-                </div>
-                <span className="text-xs text-gray-500">{label}</span>
-              </div>
-            ))}
+          <div className="mt-6 flex flex-col gap-2 text-gray-400 text-xs">
+            <div className="flex items-center gap-2">
+              <Shield size={12} />
+              <span>Session secure and private</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Lightbulb size={12} />
+              <span>Stammering is welcome here - every attempt is progress.</span>
+            </div>
           </div>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex gap-4 mt-6 w-full max-w-xl animate-fade-in-up opacity-0" style={{ animationDelay: '300ms' }}>
-          <button
-            onClick={handleTryAgain}
-            className="btn-duolingo-secondary flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl"
-          >
-            <Mic size={18} />
-            Try Again
-          </button>
-          <button
-            onClick={handleDone}
-            className="btn-duolingo-primary flex-[2] flex items-center justify-center gap-2 py-4 rounded-2xl"
-          >
-            I'm Done
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5}>
-              <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Tip card */}
-        <div
-          key={tipIdx}
-          className="mt-5 w-full max-w-xl bg-white rounded-2xl p-5 border border-gray-100 flex items-start gap-4 animate-fade-in-up opacity-0"
-          style={{ animationDelay: '400ms' }}
-        >
-          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-            <Lightbulb size={18} className="text-emerald-600 animate-wiggle" />
-          </div>
-          <div>
-            <p className="font-semibold text-emerald-600 text-sm mb-1">Friendly Reminder</p>
-            <p className="text-sm text-gray-600 leading-relaxed">{TIPS[tipIdx]}</p>
-          </div>
-        </div>
-
-        <div className="mt-6 flex items-center gap-2 text-gray-400 text-xs animate-fade-in opacity-0" style={{ animationDelay: '500ms' }}>
-          <Shield size={12} />
-          <span>Session Secure &amp; Private</span>
         </div>
       </main>
     </div>

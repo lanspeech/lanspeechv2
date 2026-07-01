@@ -1,7 +1,19 @@
 import type { PracticeSession, UserStats } from './types';
 
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseLocalDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 function toDateStr(dateStr: string): string {
-  return new Date(dateStr).toISOString().split('T')[0];
+  return formatLocalDate(new Date(dateStr));
 }
 
 export function computeStats(
@@ -9,7 +21,7 @@ export function computeStats(
   lessonsCompleted: number,
   dailyGoalMins: number
 ): UserStats {
-  const today = new Date().toISOString().split('T')[0];
+  const today = formatLocalDate(new Date());
 
   // Aggregate minutes per date
   const minutesByDate = new Map<string, number>();
@@ -20,17 +32,25 @@ export function computeStats(
 
   const practicedDates = new Set(minutesByDate.keys());
   const missedTargetDates = new Set<string>();
+  const targetMetDates = new Set<string>();
+  const hasDailyGoal = dailyGoalMins > 0;
+
   for (const [d, mins] of minutesByDate) {
-    if (mins < dailyGoalMins) missedTargetDates.add(d);
+    const met = hasDailyGoal ? mins >= dailyGoalMins : mins > 0;
+    if (!met) {
+      missedTargetDates.add(d);
+    } else {
+      targetMetDates.add(d);
+    }
   }
 
-  // Current streak — consecutive days ending today (or yesterday if not yet practiced today)
+  // Current streak — consecutive goal-met days ending today (or yesterday if not yet practiced today)
   let currentStreak = 0;
   {
-    const start = practicedDates.has(today) ? 0 : 1;
-    for (let i = start; i < 365; i++) {
+    const startOffset = targetMetDates.has(today) ? 0 : 1;
+    for (let i = startOffset; i < 365; i++) {
       const d = offsetDate(today, -i);
-      if (practicedDates.has(d)) {
+      if (targetMetDates.has(d)) {
         currentStreak++;
       } else {
         break;
@@ -38,13 +58,15 @@ export function computeStats(
     }
   }
 
-  // Longest streak
-  const sortedDates = [...practicedDates].sort();
+  // Longest streak of goal-met days
+  const sortedDates = [...minutesByDate.keys()].sort();
   let longestStreak = 0;
   let run = 0;
   let prevDate = '';
   for (const d of sortedDates) {
-    if (prevDate && diffDays(prevDate, d) === 1) {
+    if (!targetMetDates.has(d)) {
+      run = 0;
+    } else if (prevDate && diffDays(prevDate, d) === 1) {
       run++;
     } else {
       run = 1;
@@ -67,13 +89,14 @@ export function computeStats(
     dailyGoalMins,
     practicedDates,
     missedTargetDates,
+    targetMetDates,
   };
 }
 
 function offsetDate(baseIso: string, days: number): string {
-  const d = new Date(baseIso);
+  const d = parseLocalDate(baseIso);
   d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
+  return formatLocalDate(d);
 }
 
 function diffDays(a: string, b: string): number {

@@ -194,7 +194,7 @@ CREATE POLICY "update_own_completions" ON lesson_completions FOR UPDATE
 CREATE POLICY "delete_own_completions" ON lesson_completions FOR DELETE
   TO authenticated USING (auth.uid() = user_id);
 
--- ─── New-user trigger — seeds realistic practice history ─────────────────────
+-- ─── New-user trigger — create profile for new users ─────────────────────
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
@@ -202,12 +202,6 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
-DECLARE
-  l1 uuid; l2 uuid;
-  i  integer;
-  d  date;
-  dm integer;
-  stype text;
 BEGIN
   -- Create profile (display_name derived from the part before @ in email)
   INSERT INTO public.profiles (user_id, display_name)
@@ -216,80 +210,6 @@ BEGIN
     initcap(split_part(coalesce(new.email, 'user'), '@', 1))
   )
   ON CONFLICT (user_id) DO NOTHING;
-
-  -- Fetch the first two lesson IDs
-  SELECT id INTO l1 FROM public.lessons WHERE day_number = 1 AND is_bonus = false LIMIT 1;
-  SELECT id INTO l2 FROM public.lessons WHERE day_number = 2 AND is_bonus = false LIMIT 1;
-
-  -- Seed 12 consecutive days (days 11 → 0 ago) for a 12-day streak
-  FOR i IN REVERSE 11..0 LOOP
-    d := CURRENT_DATE - i;
-    -- Day 6 ago = short session (below 20-min goal → "missed target" in calendar)
-    IF i = 6 THEN
-      dm := 8;
-    ELSIF i >= 9 THEN
-      dm := 18;
-    ELSIF i >= 5 THEN
-      dm := 20;
-    ELSE
-      dm := 22 + (5 - i);
-    END IF;
-
-    stype := CASE (i % 4)
-      WHEN 0 THEN 'breathing'
-      WHEN 1 THEN 'repeat'
-      WHEN 2 THEN 'read_aloud'
-      ELSE 'speak_freely'
-    END;
-
-    INSERT INTO public.practice_sessions
-      (user_id, session_type, duration_mins, started_at, completed_at)
-    VALUES (
-      new.id,
-      stype,
-      dm,
-      (d::timestamptz + '09:00:00'::interval),
-      (d::timestamptz + '09:00:00'::interval + (dm || ' minutes')::interval)
-    );
-  END LOOP;
-
-  -- Seed 12 older scattered sessions (days 12–30 ago, with gaps)
-  FOR i IN 12..30 LOOP
-    -- Keep ~12 of these 19 days (skip when (i % 5 = 3) or (i % 7 = 5))
-    IF (i % 5 = 3) OR (i % 7 = 5) THEN CONTINUE; END IF;
-
-    d := CURRENT_DATE - i;
-    dm := 10 + (i % 7) * 2;
-
-    stype := CASE (i % 4)
-      WHEN 0 THEN 'read_aloud'
-      WHEN 1 THEN 'breathing'
-      WHEN 2 THEN 'speak_freely'
-      ELSE 'repeat'
-    END;
-
-    INSERT INTO public.practice_sessions
-      (user_id, session_type, duration_mins, started_at, completed_at)
-    VALUES (
-      new.id,
-      stype,
-      dm,
-      (d::timestamptz + '08:30:00'::interval),
-      (d::timestamptz + '08:30:00'::interval + (dm || ' minutes')::interval)
-    );
-  END LOOP;
-
-  -- Mark lessons 1 and 2 as completed
-  IF l1 IS NOT NULL THEN
-    INSERT INTO public.lesson_completions (user_id, lesson_id, completed_at)
-    VALUES (new.id, l1, CURRENT_DATE - 2)
-    ON CONFLICT (user_id, lesson_id) DO NOTHING;
-  END IF;
-  IF l2 IS NOT NULL THEN
-    INSERT INTO public.lesson_completions (user_id, lesson_id, completed_at)
-    VALUES (new.id, l2, CURRENT_DATE - 1)
-    ON CONFLICT (user_id, lesson_id) DO NOTHING;
-  END IF;
 
   RETURN new;
 END;

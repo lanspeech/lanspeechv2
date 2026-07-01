@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
@@ -55,20 +56,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string): Promise<string | null> => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return error?.message ?? null;
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return error.message;
+    if (data?.user) {
+      try {
+        await fetchProfile(data.user.id);
+      } catch {
+        // ignore profile fetch errors here; onAuthStateChange will handle refresh
+      }
+    }
+    return null;
   };
 
   const signUp = async (email: string, password: string, name: string): Promise<string | null> => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { display_name: name } },
+    });
     if (error) return error.message;
-    // Update display_name after trigger creates the profile row
+
     if (data.user) {
       await new Promise(r => setTimeout(r, 500)); // let trigger settle
       await supabase
         .from('profiles')
-        .update({ display_name: name })
-        .eq('user_id', data.user.id);
+        .upsert({ user_id: data.user.id, display_name: name }, { onConflict: 'user_id' });
       await fetchProfile(data.user.id);
     }
     return null;
@@ -76,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    setProfile(null);
   };
 
   const refreshProfile = async () => {
