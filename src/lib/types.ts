@@ -93,4 +93,5 @@ export interface UserStats {
   dailyGoalMins: number;
   practicedDates: Set<string>;
   missedTargetDates: Set<string>;
+  targetMetDates: Set<string>;
 }

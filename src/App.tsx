@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { supabase } from './lib/supabase';
 import Auth from './pages/Auth';
-import Sidebar from './components/Sidebar';
+import Sidebar, { Page } from './components/Sidebar';
 import { Menu } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import Library from './pages/Library';
@@ -11,11 +11,11 @@ import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 import Lesson from './pages/Lesson';
 import Completion from './pages/Completion';
+import DebugRecord from './pages/DebugRecord';
 import { fetchNextLesson } from './lib/lessons';
 import type { Lesson as LessonType } from './lib/types';
 import { Leaf } from 'lucide-react';
 
-type Page = 'dashboard' | 'library' | 'progress' | 'profile' | 'admin';
 type View = 'app' | 'lesson' | 'completion';
 
 function AppInner() {
@@ -172,6 +172,7 @@ function AppInner() {
           {currentPage === 'progress' && <Progress dataVersion={dataVersion} onNavigateTo={navigateToPage} />}
           {currentPage === 'profile' && <Profile />}
           {currentPage === 'admin' && <Admin />}
+          {currentPage === 'debug' && <DebugRecord />}
         </div>
       </main>
     </div>

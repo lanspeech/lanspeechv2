@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import Modal from './Modal';
 import Toast from './Toast';
 
-type Page = 'dashboard' | 'library' | 'progress' | 'profile' | 'admin';
+export type Page = 'dashboard' | 'library' | 'progress' | 'profile' | 'admin' | 'debug';
 
 interface SidebarProps {
   currentPage: Page;
@@ -158,6 +158,17 @@ export default function Sidebar({ currentPage, onNavigate, onStartPractice, show
           );
         })}
       </nav>
+
+      {import.meta.env.DEV && (
+        <div className="mt-3 px-4">
+          <button
+            onClick={() => { onNavigate('debug' as Page); onCloseMobile?.(); }}
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+          >
+            Debug
+          </button>
+        </div>
+      )}
 
       {/* Start Practice button */}
       {showStartPractice && onStartPractice && (

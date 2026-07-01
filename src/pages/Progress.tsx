@@ -42,7 +42,7 @@ function CalendarCell({
       >
         {day}
       </div>
-      <div className={`w-1.5 h-1.5 rounded-full transition-colors ${(practiced || isToday) ? 'bg-emerald-500' : 'bg-transparent'}`} />
+      <div className={`w-1.5 h-1.5 rounded-full transition-colors ${(practiced && !missedTarget ? 'bg-emerald-500' : 'bg-transparent')}`} />
     </div>
   );
 }

@@ -14,6 +14,8 @@ interface UseMicrophoneRecordingResult {
   recordingSaved: boolean;
   loading: boolean;
   error: string | null;
+  lastUploadResult: unknown | null;
+  lastInsertResult: unknown | null;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<void>;
   clearRecording: () => Promise<void>;
@@ -26,6 +28,8 @@ export function useMicrophoneRecording(options: UseMicrophoneRecordingOptions = 
   const [recordingSaved, setRecordingSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastUploadResult, setLastUploadResult] = useState<unknown>(null);
+  const [lastInsertResult, setLastInsertResult] = useState<unknown>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -38,8 +42,9 @@ export function useMicrophoneRecording(options: UseMicrophoneRecordingOptions = 
   }, []);
 
   const uploadRecording = async (blob: Blob) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const currentUser = session?.user;
+    // Prefer explicit user fetch to avoid session shape differences across supabase versions
+    const { data: userData } = await supabase.auth.getUser();
+    const currentUser = userData?.user ?? null;
 
     if (!currentUser) {
       throw new Error('You must be signed in to save a recording.');
@@ -54,6 +59,8 @@ export function useMicrophoneRecording(options: UseMicrophoneRecordingOptions = 
       upsert: false,
       cacheControl: '3600',
     });
+
+    setLastUploadResult(uploadRes);
 
     if (uploadRes.error) {
       console.error('storage upload error response:', uploadRes);
@@ -80,6 +87,8 @@ export function useMicrophoneRecording(options: UseMicrophoneRecordingOptions = 
         source: 'lesson-recording',
       },
     });
+
+    setLastInsertResult(insertRes);
 
     if (insertRes.error) {
       console.error('db insert error response:', insertRes);
@@ -146,24 +155,18 @@ export function useMicrophoneRecording(options: UseMicrophoneRecordingOptions = 
             await uploadRecording(completedBlob);
             setRecordingSaved(true);
             setError(null);
-        } catch (err) {
-              // surface detailed Supabase errors for debugging RLS failures
-              if (err && typeof err === 'object') {
-                try {
-                  // @ts-ignore
-                  const msg = err.message || JSON.stringify(err);
-                  setError(`Upload failed: ${msg}`);
-                  console.error('uploadRecording error:', err);
-                } catch (e) {
-                  setError('Recording upload failed');
-                }
-              } else {
-                setError(err instanceof Error ? err.message : 'Recording upload failed');
-              }
-        } finally {
-          setLoading(false);
-          resolve();
-        }
+          } catch (err) {
+            const message = err instanceof Error
+              ? err.message
+              : typeof err === 'object' && err !== null
+                ? JSON.stringify(err)
+                : String(err);
+            setError(`Upload failed: ${message}`);
+            console.error('uploadRecording error:', err);
+          } finally {
+            setLoading(false);
+            resolve();
+          }
       };
 
       mediaRecorder.stop();
@@ -197,6 +200,9 @@ export function useMicrophoneRecording(options: UseMicrophoneRecordingOptions = 
     recordingSaved,
     loading,
     error,
+    // expose raw responses for debugging
+    lastUploadResult: lastUploadResult ?? null,
+    lastInsertResult: lastInsertResult ?? null,
     startRecording,
     stopRecording,
     clearRecording,

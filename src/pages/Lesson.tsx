@@ -63,11 +63,19 @@ export default function Lesson({ lesson, onClose, onComplete, onAdvance }: Props
   const [lessonCount, setLessonCount] = useState(3);
   const [isFinalUnitLesson, setIsFinalUnitLesson] = useState(false);
   const exercises = lesson?.exercises ?? [];
-  const currentExercise = exercises[activeExerciseIndex];
-  const { speaking, speak, stop } = useSpeech(currentExercise?.speakText ?? lesson?.practice_phrase ?? '');
+  const defaultExercise = {
+    id: 'general-practice',
+    title: lesson ? 'Warm-up' : 'General Practice',
+    description: lesson
+      ? 'Follow the steps slowly and stay relaxed.'
+      : 'Record a short practice to build confidence in your own voice.',
+    speakText: lesson?.practice_phrase ?? 'Take a deep breath and speak when you are ready.',
+  };
+  const currentExercise = exercises[activeExerciseIndex] ?? defaultExercise;
+  const { speaking, speak, stop } = useSpeech(currentExercise.speakText ?? '');
   const { recording, audioUrl, recordingSaved, loading, error, startRecording, stopRecording, clearRecording } = useMicrophoneRecording({
     lessonId: lesson?.id,
-    exerciseId: currentExercise?.id,
+    exerciseId: currentExercise.id,
     userId: user?.id,
   });
   const progressStorageKey = lesson ? `lesson-progress-${lesson.id}` : null;
@@ -88,7 +96,7 @@ export default function Lesson({ lesson, onClose, onComplete, onAdvance }: Props
       setActiveExerciseIndex(0);
     }
     sessionStart.current = Date.now();
-  }, [lesson?.id, progressStorageKey, exercises.length]);
+  }, [lesson, progressStorageKey, exercises.length]);
 
   useEffect(() => {
     if (!lesson || progressStorageKey == null) return;
@@ -131,12 +139,21 @@ export default function Lesson({ lesson, onClose, onComplete, onAdvance }: Props
 
   useEffect(() => {
     stop();
-  }, [activeExerciseIndex]);
+  }, [activeExerciseIndex, stop]);
 
   const clearSavedProgress = () => {
     if (progressStorageKey) {
       localStorage.removeItem(progressStorageKey);
     }
+  };
+
+  const handleClose = async () => {
+    if (recording) {
+      await stopRecording();
+    }
+    clearSavedProgress();
+    window.speechSynthesis.cancel();
+    onClose();
   };
 
   const handlePlay = () => (speaking ? stop() : speak());
@@ -171,7 +188,7 @@ export default function Lesson({ lesson, onClose, onComplete, onAdvance }: Props
   return (
     <div className={`min-h-screen bg-slate-100 flex flex-col transition-opacity duration-300 ${justDone ? 'opacity-0' : 'opacity-100'}`}>
       <header className="bg-white border-b border-gray-100 px-4 sm:px-6 py-3 flex flex-col sm:flex-row items-center gap-4 sm:gap-6 animate-fade-in">
-        <button onClick={() => { window.speechSynthesis.cancel(); onClose(); }} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 hover:scale-110 active:scale-90 transition-all duration-150">
+        <button onClick={() => { void handleClose(); }} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 hover:scale-110 active:scale-90 transition-all duration-150">
           <X size={18} className="text-gray-500" />
         </button>
         <div className="flex-shrink-0">
