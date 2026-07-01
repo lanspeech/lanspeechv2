@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Flame, ChevronLeft, ChevronRight, TrendingUp, Mic, Rocket, Wind, Repeat2, BookOpen, MessageSquare, Zap, Clock, Share2, History, X } from 'lucide-react';
+import { Flame, ChevronLeft, ChevronRight, TrendingUp, Mic, Rocket, Wind, Repeat2, BookOpen, MessageSquare, Zap, Clock, Share2, History, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { computeStats } from '../lib/stats';
+import { fetchLessons } from '../lib/lessons';
 import type { PracticeSession, UserStats } from '../lib/types';
 import Modal from '../components/Modal';
 import Toast from '../components/Toast';
@@ -50,7 +51,7 @@ interface SessionWithLesson extends PracticeSession {
   lessons?: { title: string; day_number: number } | null;
 }
 
-const SESSION_META: Record<string, { label: string; Icon: React.ComponentType<{ size: number; className?: string }> }> = {
+const SESSION_META: Record<string, { label: string; Icon: LucideIcon }> = {
   breathing: { label: 'Breathing', Icon: Wind },
   repeat: { label: 'Repeat After Me', Icon: Repeat2 },
   read_aloud: { label: 'Read Aloud', Icon: BookOpen },
@@ -188,7 +189,7 @@ export default function Progress({ dataVersion, onNavigateTo }: Props) {
       setLoading(true);
       const since = new Date();
       since.setDate(since.getDate() - 180);
-      const [{ data: sessData }, { count: lessonCount }] = await Promise.all([
+      const [{ data: sessData }, { data: completions }, lessons] = await Promise.all([
         supabase
           .from('practice_sessions')
           .select('*')
@@ -196,12 +197,15 @@ export default function Progress({ dataVersion, onNavigateTo }: Props) {
           .gte('started_at', since.toISOString()),
         supabase
           .from('lesson_completions')
-          .select('*', { count: 'exact', head: true })
+          .select('lesson_id')
           .eq('user_id', user.id),
+        fetchLessons(),
       ]);
       const s = (sessData ?? []) as PracticeSession[];
+      const lessonIds = new Set(lessons.map(lesson => lesson.id));
+      const completedCount = (completions ?? []).filter(item => lessonIds.has(item.lesson_id)).length;
       setSessions(s);
-      setStats(computeStats(s, lessonCount ?? 0, profile.daily_goal_mins));
+      setStats(computeStats(s, completedCount, profile.daily_goal_mins));
       setLoading(false);
       setBarKey(k => k + 1);
     };

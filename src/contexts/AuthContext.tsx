@@ -60,15 +60,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, name: string): Promise<string | null> => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { display_name: name } },
+    });
     if (error) return error.message;
-    // Update display_name after trigger creates the profile row
+
     if (data.user) {
       await new Promise(r => setTimeout(r, 500)); // let trigger settle
       await supabase
         .from('profiles')
-        .update({ display_name: name })
-        .eq('user_id', data.user.id);
+        .upsert({ user_id: data.user.id, display_name: name }, { onConflict: 'user_id' });
       await fetchProfile(data.user.id);
     }
     return null;

@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Flame, Timer, PartyPopper, AlertCircle, Clock, BookOpen, Repeat2, Zap } from 'lucide-react';
+import { Flame, Timer, PartyPopper, AlertCircle, Clock, Repeat2, Zap } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { computeStats } from '../lib/stats';
+import { fetchLessons } from '../lib/lessons';
 import type { PracticeSession } from '../lib/types';
 import Modal from '../components/Modal';
 
@@ -160,7 +161,7 @@ export default function Completion({ sessionDurationMins, dataVersion, onContinu
     const load = async () => {
       const since = new Date();
       since.setDate(since.getDate() - 90);
-      const [{ data: sessData }, { count: lessonCount }] = await Promise.all([
+      const [{ data: sessData }, { data: completions }, lessons] = await Promise.all([
         supabase
           .from('practice_sessions')
           .select('*')
@@ -168,11 +169,14 @@ export default function Completion({ sessionDurationMins, dataVersion, onContinu
           .gte('started_at', since.toISOString()),
         supabase
           .from('lesson_completions')
-          .select('*', { count: 'exact', head: true })
+          .select('lesson_id')
           .eq('user_id', user.id),
+        fetchLessons(),
       ]);
       const s = (sessData ?? []) as PracticeSession[];
-      const stats = computeStats(s, lessonCount ?? 0, profile.daily_goal_mins);
+      const lessonIds = new Set(lessons.map(lesson => lesson.id));
+      const completedCount = (completions ?? []).filter(item => lessonIds.has(item.lesson_id)).length;
+      const stats = computeStats(s, completedCount, profile.daily_goal_mins);
       setStreak(stats.currentStreak);
       setDailyMins(stats.todayMinutes);
       setGoalPct(Math.min(100, Math.round((stats.todayMinutes / stats.dailyGoalMins) * 100)));
@@ -210,7 +214,7 @@ export default function Completion({ sessionDurationMins, dataVersion, onContinu
           <h1 className="text-3xl font-bold text-emerald-800">Great Job!</h1>
         </div>
         <p className="text-gray-600 mb-8 text-base animate-fade-in-up opacity-0" style={{ animationDelay: '280ms' }}>
-          Today's practice completed
+          Today's practice completed. If you stammered at all, that is still progress — every gentle attempt matters.
         </p>
 
         {/* Daily goal */}
