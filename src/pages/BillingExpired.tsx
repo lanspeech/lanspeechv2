@@ -2,8 +2,8 @@ import { Calendar, RefreshCw, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Button from '../components/ui/Button';
 
-// Update this with your actual Selar payment link
-const SELAR_RENEWAL_LINK = 'https://selar.com/xyzzz';
+// Selar monthly subscription payment link with add_to_cart optimization
+const SELAR_RENEWAL_LINK = 'https://selar.com/66770127xq?add_to_cart=1';
 
 export default function BillingExpired() {
   const { user } = useAuth();
