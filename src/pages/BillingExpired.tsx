@@ -3,8 +3,8 @@ import { useAuth } from '../contexts/AuthContext';
 import Button from '../components/ui/Button';
 
 // Selar subscription payment links with add_to_cart optimization
-const SELAR_MONTHLY_LINK = 'https://selar.co';
-const SELAR_ANNUAL_LINK = 'https://selar.co';
+const SELAR_MONTHLY_LINK = 'https://selar.com/66770127xq/?add_to_cart=1';
+const SELAR_ANNUAL_LINK = 'https://selar.com/71t6q0g732/?add_to_cart=1';
 
 export default function BillingExpired() {
   const { user } = useAuth();
