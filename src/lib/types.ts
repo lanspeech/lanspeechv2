@@ -60,6 +60,7 @@ export interface Profile {
   specialist_name: string | null;
   specialist_photo_url: string | null;
   is_admin?: boolean;
+  subscription_expires_at: string | null;
 }
 
 export interface PracticeSession {

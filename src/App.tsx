@@ -12,6 +12,9 @@ import Admin from './pages/Admin';
 import Lesson from './pages/Lesson';
 import Completion from './pages/Completion';
 import DebugRecord from './pages/DebugRecord';
+import BillingExpired from './pages/BillingExpired';
+import Pricing from './pages/Pricing';
+import { ProtectedRoute } from './components/ProtectedRoute';
 import { fetchLessonById, fetchNextLesson } from './lib/lessons';
 import type { Lesson as LessonType } from './lib/types';
 import { Leaf } from 'lucide-react';
@@ -193,9 +196,15 @@ function AppInner() {
         path="/"
         element={<Navigate to="/dashboard" replace />}
       />
+      <Route path="/billing-expired" element={<BillingExpired />} />
+      <Route path="/pricing" element={<Pricing />} />
       <Route
         path="/"
-        element={<AppLayout onStartPractice={startPractice} isAdmin={Boolean(profile?.is_admin)} />}
+        element={
+          <ProtectedRoute>
+            <AppLayout onStartPractice={startPractice} isAdmin={Boolean(profile?.is_admin)} />
+          </ProtectedRoute>
+        }
       >
         <Route path="dashboard" element={<Dashboard onStartPractice={startPractice} dataVersion={dataVersion} />} />
         <Route path="library" element={<Library onStartLesson={startPractice} dataVersion={dataVersion} />} />
@@ -207,8 +216,16 @@ function AppInner() {
         <Route path="admin" element={<Admin />} />
         <Route path="debug" element={<DebugRecord />} />
       </Route>
-      <Route path="lesson/:lessonId?" element={<LessonRoute />} />
-      <Route path="completion/:lessonId?" element={<CompletionRoute />} />
+      <Route path="lesson/:lessonId?" element={
+        <ProtectedRoute>
+          <LessonRoute />
+        </ProtectedRoute>
+      } />
+      <Route path="completion/:lessonId?" element={
+        <ProtectedRoute>
+          <CompletionRoute />
+        </ProtectedRoute>
+      } />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
