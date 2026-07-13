@@ -3,6 +3,7 @@ import { User, Bell, Shield, ChevronRight, Award, Mic, Edit2, Check, Eye, EyeOff
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import Toast from '../components/Toast';
+import Button from '../components/ui/Button';
 
 type Section = 'notifications' | 'account' | 'privacy' | null;
 
@@ -77,10 +78,10 @@ export default function Profile() {
                   value={nameInput}
                   onChange={e => setNameInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && saveName()}
-                  className="flex-1 text-base font-bold text-gray-900 border border-emerald-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                  className="flex-1 text-base font-bold text-gray-900 border border-emerald-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300 min-h-[48px]"
                   autoFocus
                 />
-                <button onClick={saveName} disabled={savingName} className="text-emerald-600 hover:text-emerald-700 active:scale-90 transition-all">
+                <button onClick={saveName} disabled={savingName} className="w-10 h-10 flex items-center justify-center text-emerald-600 hover:text-emerald-700 active:scale-90 transition-all">
                   <Check size={18} />
                 </button>
               </div>
@@ -217,48 +218,48 @@ function NotificationsPanel({ onSave }: { onSave: () => void }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <label className="flex items-center justify-between cursor-pointer">
-        <div>
-          <p className="text-sm font-medium text-gray-800">Daily practice reminders</p>
-          <p className="text-xs text-gray-500">Get a reminder to stay consistent</p>
-        </div>
-        <button
-          role="switch"
-          aria-checked={enabled}
-          onClick={() => setEnabled(e => !e)}
-          className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${enabled ? 'bg-emerald-500' : 'bg-gray-200'}`}
-        >
-          <span
-            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${enabled ? 'translate-x-5' : ''}`}
-          />
-        </button>
-      </label>
+        <label className="flex items-center justify-between cursor-pointer py-1">
+          <div>
+            <p className="text-sm font-medium text-gray-800">Daily practice reminders</p>
+            <p className="text-xs text-gray-500">Get a reminder to stay consistent</p>
+          </div>
+          <button
+            role="switch"
+            aria-checked={enabled}
+            onClick={() => setEnabled(e => !e)}
+            className={`relative w-14 h-8 rounded-full transition-colors duration-200 flex-shrink-0 ${enabled ? 'bg-emerald-500' : 'bg-gray-200'}`}
+          >
+            <span
+              className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-sm transition-transform duration-200 ${enabled ? 'translate-x-6' : ''}`}
+            />
+          </button>
+        </label>
 
       {enabled && (
         <div className="animate-fade-in-up opacity-0">
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Remind me at</label>
+          <label className="block text-xs font-medium text-gray-600 mb-2.5">Remind me at</label>
           <input
             type="time"
             value={time}
             onChange={e => setTime(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
+            className="w-full px-3 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300 min-h-[48px]"
           />
         </div>
       )}
 
-      <label className="flex items-center gap-3 cursor-pointer">
-        <input type="checkbox" className="w-4 h-4 rounded accent-emerald-600" defaultChecked />
+      <label className="flex items-center justify-between cursor-pointer py-1.5">
         <span className="text-sm text-gray-700">Streak at-risk alerts</span>
+        <input type="checkbox" className="w-5 h-5 rounded accent-emerald-600" defaultChecked />
       </label>
 
-      <label className="flex items-center gap-3 cursor-pointer">
-        <input type="checkbox" className="w-4 h-4 rounded accent-emerald-600" defaultChecked />
+      <label className="flex items-center justify-between cursor-pointer py-1.5">
         <span className="text-sm text-gray-700">New lesson available</span>
+        <input type="checkbox" className="w-5 h-5 rounded accent-emerald-600" defaultChecked />
       </label>
 
-      <button onClick={save} className="btn-duolingo-primary py-2.5 rounded-xl text-sm font-semibold">
+      <Button onClick={save} size="md" className="w-full">
         Save Preferences
-      </button>
+      </Button>
     </div>
   );
 }
@@ -323,13 +324,14 @@ function AccountSettingsPanel({
         <div className="flex justify-between text-xs text-gray-400 mt-1">
           <span>5 min</span><span>60 min</span>
         </div>
-        <button
+        <Button
           onClick={saveGoal}
           disabled={savingGoal}
-          className="btn-duolingo-primary py-2 px-5 rounded-xl text-sm font-semibold mt-3 disabled:opacity-60"
+          className="mt-3 w-full"
+          size="md"
         >
           {savingGoal ? 'Saving…' : 'Save Goal'}
-        </button>
+        </Button>
       </div>
 
       <div className="border-t border-gray-100 pt-4">
@@ -341,23 +343,25 @@ function AccountSettingsPanel({
               value={newPw}
               onChange={e => setNewPw(e.target.value)}
               placeholder="New password (min 6 characters)"
-              className="w-full px-3 py-2.5 pr-10 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              className="w-full px-3 py-3 pr-12 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300 min-h-[48px]"
             />
             <button
               type="button"
               onClick={() => setShowNewPw(s => !s)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600"
             >
-              {showNewPw ? <EyeOff size={15} /> : <Eye size={15} />}
+              {showNewPw ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
-          <button
+          <Button
             onClick={changePassword}
             disabled={savingPw || !newPw}
-            className="btn-duolingo-secondary py-2 px-5 rounded-xl text-sm font-semibold disabled:opacity-60 self-start"
+            variant="secondary"
+            size="md"
+            className="self-start"
           >
             {savingPw ? 'Updating…' : 'Update Password'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -421,14 +425,16 @@ function PrivacyPanel({
         <p className="text-xs text-gray-400 mt-3">All data is encrypted at rest and never sold to third parties.</p>
       </div>
 
-      <button
+      <Button
         onClick={downloadData}
         disabled={downloading}
-        className="btn-duolingo-secondary py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 justify-center disabled:opacity-60"
+        variant="secondary"
+        size="md"
+        className="flex items-center gap-2 justify-center"
       >
         <Download size={15} />
         {downloading ? 'Preparing…' : 'Download My Data'}
-      </button>
+      </Button>
 
       <div className="border-t border-gray-100 pt-3">
         <button

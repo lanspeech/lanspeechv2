@@ -3,6 +3,7 @@ import { LayoutDashboard, BookOpen, TrendingUp, User, HelpCircle, LogOut, Leaf, 
 import { useAuth } from '../contexts/AuthContext';
 import Modal from './Modal';
 import Toast from './Toast';
+import Button from './ui/Button';
 
 export type Page = 'dashboard' | 'library' | 'progress' | 'profile' | 'admin' | 'debug';
 
@@ -48,7 +49,7 @@ function SupportModal({ onClose }: { onClose: () => void }) {
           </div>
           <h3 className="text-lg font-bold text-gray-900 mb-2">Message Sent!</h3>
           <p className="text-gray-500 text-sm mb-6">We typically respond within 24 hours. Check your email for updates.</p>
-          <button onClick={onClose} className="btn-duolingo-primary px-6 py-2.5 rounded-xl text-sm">Done</button>
+          <Button onClick={onClose} size="md">Done</Button>
         </div>
       </Modal>
     );
@@ -90,25 +91,16 @@ function SupportModal({ onClose }: { onClose: () => void }) {
             <Mail size={16} />
             Email us
           </a>
-          <button
-            type="submit"
-            disabled={!message.trim() || sending}
-            className="btn-duolingo-primary flex-1 py-2.5 rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <Button type="submit" size="md" className="flex-1" disabled={!message.trim() || sending}>
             {sending ? 'Sending...' : 'Send Message'}
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>
   );
 }
 
-interface SidebarPropsExtended extends SidebarProps {
-  mobileOpen?: boolean;
-  onCloseMobile?: () => void;
-}
-
-export default function Sidebar({ currentPage, onNavigate, onStartPractice, showStartPractice, mobileOpen, onCloseMobile }: SidebarPropsExtended) {
+export default function Sidebar({ currentPage, onNavigate, onStartPractice, showStartPractice }: SidebarProps) {
   const { profile, signOut } = useAuth();
   const [showSupport, setShowSupport] = useState(false);
 
@@ -134,7 +126,7 @@ export default function Sidebar({ currentPage, onNavigate, onStartPractice, show
           return (
             <button
               key={id}
-              onClick={() => { onNavigate(id); onCloseMobile?.(); }}
+              onClick={() => onNavigate(id)}
               className={`group flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 w-full text-left animate-slide-in-left opacity-0 ${
                 active
                   ? 'bg-emerald-100 text-emerald-700 scale-[1.02]'
@@ -162,7 +154,7 @@ export default function Sidebar({ currentPage, onNavigate, onStartPractice, show
       {import.meta.env.DEV && (
         <div className="mt-3 px-4">
           <button
-            onClick={() => { onNavigate('debug' as Page); onCloseMobile?.(); }}
+            onClick={() => onNavigate('debug' as Page)}
             className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
           >
             Debug
@@ -172,16 +164,9 @@ export default function Sidebar({ currentPage, onNavigate, onStartPractice, show
 
       {/* Start Practice button */}
       {showStartPractice && onStartPractice && (
-        <button
-          onClick={() => { onStartPractice(); onCloseMobile?.(); }}
-          className="btn-duolingo-primary flex items-center justify-center gap-2 py-3 px-4 rounded-2xl mb-6 animate-pop-in opacity-0 text-sm font-semibold"
-          style={{ animationDelay: '300ms' }}
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-          Start Practice
-        </button>
+          <Button size="lg" onClick={() => onStartPractice()} className="w-full mb-3 shadow-lg shadow-emerald-200/50">
+            Start Practice
+          </Button>
       )}
 
       {/* User info */}
@@ -211,21 +196,41 @@ export default function Sidebar({ currentPage, onNavigate, onStartPractice, show
     </div>
   );
 
+  const mobileItems = navItems.filter(item => item.id !== 'admin' || profile?.is_admin);
+
   return (
     <>
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 md:hidden" onClick={e => { if (e.target === e.currentTarget) onCloseMobile?.(); }}>
-          <div className="w-72 bg-white h-full p-4">
-            {renderContent()}
-          </div>
-        </div>
-      )}
-
       {/* Desktop sidebar */}
       <aside className="hidden md:flex md:w-56 min-h-screen bg-white flex-col py-8 px-4 border-r border-gray-100 shrink-0">
         {renderContent()}
       </aside>
+
+      {/* Mobile bottom tabs */}
+      <div className="md:hidden fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white px-3 py-3 shadow-[0_-12px_40px_rgba(15,23,42,0.08)]">
+        {showStartPractice && onStartPractice && (
+          <button
+            onClick={() => onStartPractice()}
+            className="w-full mb-3 rounded-3xl bg-emerald-700 px-4 py-3.5 text-base font-semibold text-white shadow-lg shadow-emerald-200/50 min-h-[56px]"
+          >
+            Start Practice
+          </button>
+        )}
+        <div className={`grid gap-2 ${mobileItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
+          {mobileItems.map(({ id, label, icon: Icon }) => {
+            const active = currentPage === id;
+            return (
+              <button
+                key={id}
+                onClick={() => onNavigate(id)}
+                className={`flex flex-col items-center justify-center gap-1 rounded-3xl px-2 py-2 text-[11px] font-semibold transition w-full min-h-[64px] ${active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-50 text-gray-600 hover:bg-slate-100'}`}
+              >
+                <Icon size={20} className={active ? 'text-emerald-700' : 'text-gray-400'} />
+                <span className="truncate w-full text-[11px] leading-tight">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </>
   );
 }

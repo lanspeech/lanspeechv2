@@ -5,7 +5,8 @@
 @layer components {
   /* Duolingo-style 3D press button */
   .btn-duolingo {
-    @apply relative font-semibold rounded-2xl transition-all duration-100 select-none;
+    @apply relative font-semibold rounded-2xl transition-all duration-100 select-none inline-flex items-center justify-center px-4 py-3 text-sm;
+    min-height: 48px;
     box-shadow: 0 4px 0 0 rgba(0, 0, 0, 0.25);
     transform: translateY(0px);
   }
@@ -62,6 +63,10 @@
   .animated-bar {
     animation: bar-grow 0.9s cubic-bezier(0.34, 1.1, 0.64, 1) both;
   }
+
+  /* Mobile-friendly utility tweaks */
+  .touchable { min-height: 48px; padding-left: 12px; padding-right: 12px; }
+  .text-responsive { font-size: 15px; }
 
   /* Nav transition */
   .nav-indicator {

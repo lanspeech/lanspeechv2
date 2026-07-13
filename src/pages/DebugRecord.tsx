@@ -6,6 +6,7 @@ export default function DebugRecord() {
   const { user } = useAuth();
   const [logs, setLogs] = useState<string[]>([]);
   const { recording, audioUrl, recordingSaved, loading, error, startRecording, stopRecording, clearRecording, lastUploadResult, lastInsertResult } = useMicrophoneRecording();
+  if (!import.meta.env.DEV) return null;
 
   const append = (msg: string) => setLogs(l => [new Date().toISOString() + ' - ' + msg, ...l].slice(0, 200));
 

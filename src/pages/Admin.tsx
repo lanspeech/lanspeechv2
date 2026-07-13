@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BookOpen, Users, PlusCircle, Trash2 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import Modal from '../components/Modal';
 import type { Lesson, Profile, Unit } from '../lib/types';
@@ -15,10 +16,11 @@ function slugify(value: string) {
 }
 
 export default function Admin() {
+  const { profile, loading: authLoading } = useAuth();
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [editing, setEditing] = useState<Lesson | null>(null);
@@ -31,7 +33,7 @@ export default function Admin() {
 
   useEffect(() => {
     const load = async () => {
-      setLoading(true);
+      setIsLoading(true);
       const [{ data: lessonsData }, { data: profilesData }, { data: unitsData }] = await Promise.all([
         supabase.from('lessons').select('*').not('unit_id', 'is', null).order('order_index'),
         supabase.from('profiles').select('*').order('display_name'),
@@ -40,10 +42,25 @@ export default function Admin() {
       setLessons((lessonsData ?? []) as Lesson[]);
       setProfiles((profilesData ?? []) as Profile[]);
       setUnits((unitsData ?? []) as Unit[]);
-      setLoading(false);
+      setIsLoading(false);
     };
     load();
   }, []);
+
+  if (authLoading) {
+    return null;
+  }
+
+  if (!profile?.is_admin) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="max-w-md w-full rounded-3xl bg-white border border-gray-100 p-8 text-center shadow-sm">
+          <p className="text-lg font-semibold text-gray-900">Access denied</p>
+          <p className="text-sm text-gray-500 mt-2">You do not have permission to view this page.</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleCreate = async () => {
     if (!newTitle.trim()) return;
@@ -129,7 +146,7 @@ export default function Admin() {
         <div className="grid grid-cols-2 gap-6">
           <div className="bg-white rounded-2xl p-4 border border-gray-100">
             <h3 className="font-semibold mb-3">Lessons</h3>
-            {loading ? <div>Loading…</div> : (
+            {isLoading ? <div>Loading…</div> : (
               <div className="space-y-3">
                 {lessons.map(l => (
                   <div key={l.id} className="flex items-center justify-between p-3 border rounded-lg">
@@ -155,7 +172,7 @@ export default function Admin() {
 
           <div className="bg-white rounded-2xl p-4 border border-gray-100">
             <h3 className="font-semibold mb-3">Learners</h3>
-            {loading ? <div>Loading…</div> : (
+            {isLoading ? <div>Loading…</div> : (
               <div className="space-y-3">
                 {profiles.map(p => (
                   <div key={p.user_id} className="flex items-center justify-between p-3 border rounded-lg">

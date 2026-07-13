@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Search, CheckCircle, Play, Lock, Sparkles, Wind, Repeat2, BookOpen, MessageSquare } from 'lucide-react';
+import Button from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { fetchUnits } from '../lib/lessons';
@@ -145,14 +146,14 @@ export default function Library({ onStartLesson, dataVersion }: Props) {
                         </div>
                         <div className="flex items-center justify-between">
                           <div className="text-xs text-gray-500">{lesson.duration_mins} mins</div>
-                          <button
+                          <Button
                             onClick={() => lesson.status !== 'locked' && onStartLesson(lesson as Lesson)}
                             disabled={lesson.status === 'locked'}
-                            className="flex items-center gap-1 rounded-full bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
-                            style={{ minHeight: 44 }}
+                            className="flex items-center gap-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
+                            size="md"
                           >
                             {lesson.status === 'completed' ? 'Review' : lesson.status === 'current' ? 'Continue' : 'Locked'}
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     );

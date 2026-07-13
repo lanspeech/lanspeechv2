@@ -6,6 +6,7 @@ import { computeStats } from '../lib/stats';
 import { fetchLessons } from '../lib/lessons';
 import type { PracticeSession } from '../lib/types';
 import Modal from '../components/Modal';
+import Button from '../components/ui/Button';
 
 interface Props {
   sessionDurationMins: number;
@@ -284,13 +285,14 @@ export default function Completion({ sessionDurationMins, dataVersion, onContinu
         </div>
 
         {/* Continue button */}
-        <button
+        <Button
+          size="lg"
           onClick={onContinue}
-          className="btn-duolingo-primary w-full py-4 rounded-2xl text-base mb-4 animate-fade-in-up opacity-0"
+          className="w-full mb-4 animate-fade-in-up opacity-0"
           style={{ animationDelay: '620ms' }}
         >
           Continue
-        </button>
+        </Button>
 
         <button
           onClick={() => setShowMistakes(true)}

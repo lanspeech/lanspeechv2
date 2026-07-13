@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { supabase } from './lib/supabase';
+import { Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
 import Auth from './pages/Auth';
-import Sidebar, { Page } from './components/Sidebar';
-import { Menu } from 'lucide-react';
+import AppLayout from './components/AppLayout';
 import Dashboard from './pages/Dashboard';
 import Library from './pages/Library';
 import Progress from './pages/Progress';
@@ -12,20 +12,25 @@ import Admin from './pages/Admin';
 import Lesson from './pages/Lesson';
 import Completion from './pages/Completion';
 import DebugRecord from './pages/DebugRecord';
-import { fetchNextLesson } from './lib/lessons';
+import { fetchLessonById, fetchNextLesson } from './lib/lessons';
 import type { Lesson as LessonType } from './lib/types';
 import { Leaf } from 'lucide-react';
 
-type View = 'app' | 'lesson' | 'completion';
-
 function AppInner() {
-  const { user, loading } = useAuth();
-  const [currentPage, setCurrentPage] = useState<Page>('dashboard');
-  const [currentView, setCurrentView] = useState<View>('app');
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const { user, loading, profile } = useAuth();
   const [currentLesson, setCurrentLesson] = useState<LessonType | null>(null);
   const [sessionDurationMins, setSessionDurationMins] = useState(0);
   const [dataVersion, setDataVersion] = useState(0);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (profile?.is_admin === false && window.location.pathname === '/admin') {
+      navigate('/dashboard', { replace: true });
+    }
+    if (!import.meta.env.DEV && window.location.pathname === '/debug') {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [navigate, profile?.is_admin]);
 
   if (loading) {
     return (
@@ -42,7 +47,7 @@ function AppInner() {
 
   const startPractice = (lesson?: LessonType | null) => {
     setCurrentLesson(lesson ?? null);
-    setCurrentView('lesson');
+    navigate(lesson?.id ? `/lesson/${lesson.id}` : '/lesson');
   };
 
   const handleLessonComplete = async (durationMins: number, lesson: LessonType | null) => {
@@ -76,7 +81,7 @@ function AppInner() {
     }
 
     setDataVersion(v => v + 1);
-    setCurrentView('completion');
+    navigate(lesson?.id ? `/completion/${lesson.id}` : '/completion');
   };
 
   const handleLessonAdvance = async (durationMins: number, lesson: LessonType | null) => {
@@ -109,73 +114,103 @@ function AppInner() {
       return;
     }
 
-    setCurrentView('completion');
+    navigate('/completion');
   };
 
-  const goToDashboard = () => {
-    setCurrentView('app');
-    setCurrentPage('dashboard');
+  const handleContinue = () => {
+    navigate('/dashboard');
   };
 
-  const navigateToPage = (page: Page) => {
-    setCurrentView('app');
-    setCurrentPage(page);
-  };
+  function LessonRoute() {
+    const { lessonId } = useParams<{ lessonId?: string }>();
+    const [lesson, setLesson] = useState<LessonType | null>(currentLesson);
+    const [loadingLesson, setLoadingLesson] = useState(false);
 
-  if (currentView === 'lesson') {
+    useEffect(() => {
+      let active = true;
+      if (!lessonId) {
+        setLesson(null);
+        return;
+      }
+
+      if (currentLesson?.id === lessonId) {
+        setLesson(currentLesson);
+        return;
+      }
+
+      setLoadingLesson(true);
+      fetchLessonById(lessonId)
+        .then(found => {
+          if (!active) return;
+          setLesson(found);
+          setCurrentLesson(found);
+        })
+        .finally(() => {
+          if (active) setLoadingLesson(false);
+        });
+
+      return () => {
+        active = false;
+      };
+    }, [lessonId]);
+
+    if (loadingLesson) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-slate-100 flex flex-col items-center justify-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-600 flex items-center justify-center animate-pulse">
+            <Leaf className="w-6 h-6 text-white" />
+          </div>
+          <p className="text-sm text-gray-500">Loading lesson…</p>
+        </div>
+      );
+    }
+
     return (
-      <div key="lesson" className="animate-fade-in">
-        <Lesson
-          lesson={currentLesson}
-          onClose={() => setCurrentView('app')}
-          onComplete={(mins) => handleLessonComplete(mins, currentLesson)}
-          onAdvance={(mins) => handleLessonAdvance(mins, currentLesson)}
-        />
-      </div>
+      <Lesson
+        lesson={lesson}
+        onClose={() => navigate('/dashboard')}
+        onComplete={(mins) => handleLessonComplete(mins, lesson)}
+        onAdvance={(mins) => handleLessonAdvance(mins, lesson)}
+      />
     );
   }
 
-  if (currentView === 'completion') {
+  function CompletionRoute() {
+    const { lessonId } = useParams<{ lessonId?: string }>();
     return (
-      <div key="completion" className="animate-fade-in">
-        <Completion
-          sessionDurationMins={sessionDurationMins}
-          dataVersion={dataVersion}
-          onContinue={goToDashboard}
-          lessonId={currentLesson?.id}
-        />
-      </div>
+      <Completion
+        sessionDurationMins={sessionDurationMins}
+        dataVersion={dataVersion}
+        onContinue={handleContinue}
+        lessonId={lessonId}
+      />
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      <Sidebar
-        currentPage={currentPage}
-        onNavigate={setCurrentPage}
-        showStartPractice={currentPage === 'library'}
-        onStartPractice={() => startPractice()}
-        mobileOpen={mobileSidebarOpen}
-        onCloseMobile={() => setMobileSidebarOpen(false)}
+    <Routes>
+      <Route
+        path="/"
+        element={<Navigate to="/dashboard" replace />}
       />
-      <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Mobile topbar */}
-        <div className="md:hidden bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-3">
-          <button onClick={() => setMobileSidebarOpen(v => !v)} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-gray-100">
-            <Menu size={18} />
-          </button>
-          <div className="text-lg font-semibold">LanSpeech</div>
-        </div>
-        <div key={currentPage} className="flex-1 flex animate-fade-in-up" style={{ animationDuration: '0.35s' }}>
-          {currentPage === 'dashboard' && <Dashboard onStartPractice={startPractice} dataVersion={dataVersion} />}
-          {currentPage === 'library' && <Library onStartLesson={startPractice} dataVersion={dataVersion} />}
-          {currentPage === 'progress' && <Progress dataVersion={dataVersion} onNavigateTo={navigateToPage} />}
-          {currentPage === 'profile' && <Profile />}
-          {currentPage === 'admin' && <Admin />}
-          {currentPage === 'debug' && <DebugRecord />}
-        </div>
-      </main>
-    </div>
+      <Route
+        path="/"
+        element={<AppLayout onStartPractice={startPractice} isAdmin={Boolean(profile?.is_admin)} />}
+      >
+        <Route path="dashboard" element={<Dashboard onStartPractice={startPractice} dataVersion={dataVersion} />} />
+        <Route path="library" element={<Library onStartLesson={startPractice} dataVersion={dataVersion} />} />
+        <Route path="progress" element={<Progress dataVersion={dataVersion} onNavigateTo={(page) => {
+          const path = page === 'dashboard' ? '/dashboard' : page === 'library' ? '/library' : page === 'progress' ? '/progress' : '/profile';
+          navigate(path);
+        }} />} />
+        <Route path="profile" element={<Profile />} />
+        <Route path="admin" element={<Admin />} />
+        <Route path="debug" element={<DebugRecord />} />
+      </Route>
+      <Route path="lesson/:lessonId?" element={<LessonRoute />} />
+      <Route path="completion/:lessonId?" element={<CompletionRoute />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
   );
 }
 

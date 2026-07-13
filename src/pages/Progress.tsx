@@ -7,6 +7,7 @@ import { fetchLessons } from '../lib/lessons';
 import type { PracticeSession, UserStats } from '../lib/types';
 import Modal from '../components/Modal';
 import Toast from '../components/Toast';
+import Button from '../components/ui/Button';
 
 interface Props {
   dataVersion: number;
@@ -432,12 +433,13 @@ export default function Progress({ dataVersion, onNavigateTo }: Props) {
                   style={{ width: `${milestonePct}%` }}
                 />
               </div>
-              <button
+              <Button
                 onClick={() => onNavigateTo('library')}
-                className="btn-duolingo-primary w-full text-sm font-semibold py-2.5 rounded-xl"
+                size="lg"
+                className="w-full"
               >
                 Keep Practicing
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -451,21 +453,24 @@ export default function Progress({ dataVersion, onNavigateTo }: Props) {
           <p className="text-gray-500 max-w-sm mx-auto text-sm leading-relaxed">
             Consistency is the key to speech success. Your streak proves that you're dedicated to your growth.
           </p>
-          <div className="flex items-center justify-center gap-3 mt-6">
-            <button
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6">
+            <Button
               onClick={handleShare}
-              className="btn-duolingo-primary flex items-center gap-2 px-6 py-2.5 rounded-full text-sm"
+              size="md"
+              className="w-full sm:w-auto"
             >
               <Share2 size={14} />
               Share Progress
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => setShowHistory(true)}
-              className="btn-duolingo-secondary flex items-center gap-2 px-6 py-2.5 rounded-full text-sm"
+              variant="secondary"
+              size="md"
+              className="w-full sm:w-auto"
             >
               <History size={14} />
               View History
-            </button>
+            </Button>
           </div>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { X, Play, Lightbulb, Shield, Volume2, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import Button from '../components/ui/Button';
 import type { Lesson as LessonType, PracticeSession } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -26,22 +27,40 @@ function useSpeech(phrase: string) {
   const [speaking, setSpeaking] = useState(false);
 
   const speak = () => {
-    if (!('speechSynthesis' in window) || !phrase) return;
-    window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(phrase);
-    utt.rate = 0.82;
-    utt.pitch = 1.0;
-    utt.lang = 'en-US';
-    const voices = window.speechSynthesis.getVoices();
-    const preferred =
-      voices.find(v => v.lang === 'en-US' && /samantha|karen|daniel/i.test(v.name)) ||
-      voices.find(v => v.lang.startsWith('en')) ||
-      voices[0];
-    if (preferred) utt.voice = preferred;
-    utt.onstart = () => setSpeaking(true);
-    utt.onend = () => setSpeaking(false);
-    utt.onerror = () => setSpeaking(false);
-    window.speechSynthesis.speak(utt);
+    if (!('speechSynthesis' in window)) {
+      console.error('Speech Synthesis API not available');
+      return;
+    }
+    
+    if (!phrase) {
+      console.warn('useSpeech: No phrase provided to speak', { phrase });
+      return;
+    }
+    
+    try {
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(phrase);
+      utt.rate = 0.82;
+      utt.pitch = 1.0;
+      utt.lang = 'en-US';
+      const voices = window.speechSynthesis.getVoices();
+      const preferred =
+        voices.find(v => v.lang === 'en-US' && /samantha|karen|daniel/i.test(v.name)) ||
+        voices.find(v => v.lang.startsWith('en')) ||
+        voices[0];
+      if (preferred) utt.voice = preferred;
+      utt.onstart = () => setSpeaking(true);
+      utt.onend = () => setSpeaking(false);
+      utt.onerror = (error) => {
+        console.error('Speech synthesis error:', error);
+        setSpeaking(false);
+      };
+      window.speechSynthesis.speak(utt);
+      console.log('Speaking:', phrase.substring(0, 50) + '...');
+    } catch (error) {
+      console.error('Error in speak():', error);
+      setSpeaking(false);
+    }
   };
 
   const stop = () => {
@@ -141,6 +160,28 @@ export default function Lesson({ lesson, onClose, onComplete, onAdvance }: Props
     stop();
   }, [activeExerciseIndex, stop]);
 
+  useEffect(() => {
+    // Ensure speech synthesis voices are loaded
+    const loadVoices = () => {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.getVoices();
+        console.log('Speech synthesis voices loaded');
+      }
+    };
+    
+    // Some browsers require listening to the voiceschanged event
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+      loadVoices();
+    }
+    
+    return () => {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
+  }, []);
+
   const clearSavedProgress = () => {
     if (progressStorageKey) {
       localStorage.removeItem(progressStorageKey);
@@ -156,7 +197,14 @@ export default function Lesson({ lesson, onClose, onComplete, onAdvance }: Props
     onClose();
   };
 
-  const handlePlay = () => (speaking ? stop() : speak());
+  const handlePlay = () => {
+    console.log('Play button clicked. Speaking state:', speaking, 'Current exercise:', currentExercise);
+    if (speaking) {
+      stop();
+    } else {
+      speak();
+    }
+  };
 
   const playRecordedAudio = () => {
     if (!audioUrl) return;
@@ -183,6 +231,7 @@ export default function Lesson({ lesson, onClose, onComplete, onAdvance }: Props
     }, 300);
   };
 
+  const lessonCompleteReady = recordingSaved && activeExerciseIndex >= exercises.length - 1;
   const lessonProgressPct = lesson ? Math.min(100, Math.round(((lesson.order_index ?? lesson.day_number) / lessonCount) * 100)) : 0;
 
   return (
@@ -298,37 +347,44 @@ export default function Lesson({ lesson, onClose, onComplete, onAdvance }: Props
             )}
           </div>
 
-          <div className="flex items-center justify-between mb-6">
-            <button onClick={() => setActiveExerciseIndex(i => Math.max(0, i - 1))} className="flex items-center gap-2 rounded-full border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <Button variant="secondary" size="md" onClick={() => setActiveExerciseIndex(i => Math.max(0, i - 1))} className="flex items-center gap-2 border border-gray-200 text-gray-700">
               <ArrowLeft size={14} /> Previous
-            </button>
+            </Button>
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <Volume2 size={12} />
               <span>{speaking ? 'Listening...' : 'Tap play to hear the cue'}</span>
             </div>
-            <button onClick={() => setActiveExerciseIndex(i => Math.min(exercises.length - 1, i + 1))} className="flex items-center gap-2 rounded-full bg-emerald-700 px-3 py-2 text-sm font-semibold text-white">
+            <Button size="md" onClick={() => setActiveExerciseIndex(i => Math.min(exercises.length - 1, i + 1))} disabled={!recordingSaved || activeExerciseIndex >= exercises.length - 1} className={`${!recordingSaved || activeExerciseIndex >= exercises.length - 1 ? 'opacity-50 cursor-not-allowed' : ''}`}>
               Next <ArrowRight size={14} />
-            </button>
+            </Button>
           </div>
 
           <div className="flex gap-3 mb-4">
-            {!isFinalUnitLesson ? (
-              <button
-                onClick={() => {
-                  clearSavedProgress();
-                  const mins = Math.max(1, Math.round((Date.now() - sessionStart.current) / 60000));
+            <Button
+              size="lg"
+              onClick={() => {
+                clearSavedProgress();
+                const mins = Math.max(1, Math.round((Date.now() - sessionStart.current) / 60000));
+                if (isFinalUnitLesson) {
+                  handleDone();
+                } else {
                   onAdvance(mins);
-                }}
-                className="btn-duolingo-primary flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl"
-              >
-                Next Lesson
-              </button>
-            ) : (
-              <button onClick={handleDone} className="btn-duolingo-primary flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl">I’m done</button>
-            )}
-            <button onClick={async () => { if (recording) await stopRecording(); else await startRecording(); }} disabled={loading} className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl font-semibold transition-all ${recording ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'} ${loading ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                }
+              }}
+              disabled={!lessonCompleteReady}
+              className={`${!lessonCompleteReady ? 'opacity-50 cursor-not-allowed' : ''} flex-1`}
+            >
+              {isFinalUnitLesson ? 'Complete Lesson' : 'Finish Lesson'}
+            </Button>
+            <Button
+              size="lg"
+              onClick={async () => { if (recording) await stopRecording(); else await startRecording(); }}
+              disabled={loading}
+              className={`${recording ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'} ${loading ? 'opacity-60 cursor-not-allowed' : ''} flex-1`}
+            >
               {loading ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving...</> : recording ? 'Stop Recording' : 'Record Yourself'}
-            </button>
+            </Button>
           </div>
 
           {recordingSaved && (
@@ -338,9 +394,9 @@ export default function Lesson({ lesson, onClose, onComplete, onAdvance }: Props
                 Your voice recording has been saved. You can listen to it before continuing. Our human speech therapists will review your recording and provide personalized feedback.
               </p>
               <div className="flex flex-wrap gap-2 mt-3">
-                <button onClick={playRecordedAudio} className="rounded-full bg-emerald-700 px-3 py-2 text-sm font-semibold text-white">▶️ Listen</button>
-                <button onClick={() => { void (async () => { await clearRecording(); await startRecording(); })(); }} disabled={loading} className="rounded-full border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 disabled:opacity-60">🔁 Record Again</button>
-                <button onClick={() => { void handleContinue(); }} disabled={loading || !recordingSaved} className="rounded-full border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 disabled:opacity-60">Continue</button>
+                <Button onClick={playRecordedAudio} size="md" className="bg-emerald-700 text-white">▶️ Listen</Button>
+                <Button onClick={() => { void (async () => { await clearRecording(); await startRecording(); })(); }} disabled={loading} variant="secondary" size="md">🔁 Record Again</Button>
+                <Button onClick={() => { void handleContinue(); }} disabled={loading || !recordingSaved} variant="secondary" size="md">Continue</Button>
               </div>
             </div>
           )}

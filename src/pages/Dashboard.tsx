@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Wind, Repeat2, BookOpen, MessageSquare, Play, Flame, Calendar, CheckCircle, Timer, Award, type LucideIcon } from 'lucide-react';
+import Button from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { computeStats } from '../lib/stats';
-import { fetchLessons } from '../lib/lessons';
+import { fetchLessons, resolveCurrentLessonForProgression } from '../lib/lessons';
 import type { Lesson, PracticeSession, UserStats } from '../lib/types';
 
 interface Props {
@@ -80,41 +81,24 @@ export default function Dashboard({ onStartPractice, dataVersion }: Props) {
       );
       setStats(computed);
 
-      const pendingLessons = lessons.filter(l => !completedIds.has(l.id));
-
-      let selectedLesson = pendingLessons[0] ?? lessons[0] ?? null;
+      const currentLesson = resolveCurrentLessonForProgression(lessons, completedIds);
       let savedStep = 0;
 
-      if (selectedLesson) {
-        const savedProgress = pendingLessons
-          .map(lesson => {
-            const saved = localStorage.getItem(`lesson-progress-${lesson.id}`);
-            if (!saved) return null;
-            try {
-              const parsed = JSON.parse(saved) as { lessonId: string; exerciseIndex: number; updatedAt: string };
-              if (parsed.lessonId === lesson.id && Number.isFinite(parsed.exerciseIndex)) {
-                const exerciseCount = lesson.exercises?.length ?? 0;
-                return {
-                  lesson,
-                  exerciseIndex: Math.min(Math.max(0, parsed.exerciseIndex), Math.max(0, exerciseCount - 1)),
-                  updatedAt: new Date(parsed.updatedAt),
-                };
-              }
-            } catch {
-              return null;
+      if (currentLesson) {
+        const saved = localStorage.getItem(`lesson-progress-${currentLesson.id}`);
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved) as { lessonId: string; exerciseIndex: number };
+            if (parsed.lessonId === currentLesson.id && Number.isFinite(parsed.exerciseIndex)) {
+              savedStep = Math.min(Math.max(0, parsed.exerciseIndex), Math.max(0, (currentLesson.exercises?.length ?? 0) - 1));
             }
-            return null;
-          })
-          .filter(Boolean) as Array<{ lesson: Lesson; exerciseIndex: number; updatedAt: Date }>;
-
-        if (savedProgress.length > 0) {
-          savedProgress.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-          selectedLesson = savedProgress[0].lesson;
-          savedStep = savedProgress[0].exerciseIndex;
+          } catch {
+            // ignore invalid progress data
+          }
         }
       }
 
-      setNextLesson(selectedLesson);
+      setNextLesson(currentLesson);
       setCurrentExerciseIndex(savedStep);
       setLoadingStats(false);
       setBarKey(k => k + 1);
@@ -191,14 +175,12 @@ export default function Dashboard({ onStartPractice, dataVersion }: Props) {
                 </div>
               </div>
 
-              <button
-                onClick={() => onStartPractice(nextLesson)}
-                className="btn-duolingo-primary w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-base animate-fade-in-up opacity-0"
-                style={{ animationDelay: '380ms' }}
-              >
-                <Play size={16} fill="white" />
-                Continue Lesson
-              </button>
+              <div style={{ animationDelay: '380ms' }} className="animate-fade-in-up opacity-0">
+                <Button size="lg" onClick={() => onStartPractice(nextLesson)} className="w-full flex items-center justify-center gap-2 text-base">
+                  <Play size={16} fill="white" />
+                  Continue Lesson
+                </Button>
+              </div>
             </div>
 
             <div

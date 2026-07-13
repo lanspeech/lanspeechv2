@@ -96,6 +96,11 @@ export async function fetchLessons(): Promise<Lesson[]> {
   return [...merged.values()].sort((a, b) => a.order_index - b.order_index);
 }
 
+export async function fetchLessonById(lessonId: string): Promise<Lesson | null> {
+  const lessons = await fetchLessons();
+  return lessons.find(lesson => lesson.id === lessonId) ?? null;
+}
+
 export async function fetchUnits(): Promise<Unit[]> {
   const lessons = await fetchLessons();
   const groups = new Map<string, Unit>();
@@ -132,4 +137,16 @@ export async function fetchNextLesson(currentLesson: Lesson): Promise<Lesson | n
 export async function fetchUnitLessons(unitId: string): Promise<Lesson[]> {
   const lessons = await fetchLessons();
   return lessons.filter(lesson => lesson.unit_id === unitId);
+}
+
+// Helper used by tests and UI to determine the current lesson for strict progression.
+// - `lessons` should be ordered by `order_index` ascending.
+// - `completedIds` is a Set of lesson ids the user has completed.
+// Returns the first incomplete lesson or null if all are completed.
+export function resolveCurrentLessonForProgression(
+  lessons: Lesson[],
+  completedLessonIds: Iterable<string>
+): Lesson | null {
+  const completedIds = new Set(completedLessonIds);
+  return lessons.find(lesson => !completedIds.has(lesson.id)) ?? null;
 }

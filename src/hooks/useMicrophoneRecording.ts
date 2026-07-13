@@ -122,9 +122,13 @@ export function useMicrophoneRecording(options: UseMicrophoneRecordingOptions = 
       mediaRecorder.onstop = () => setRecording(false);
 
       mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.start();
-    } catch {
-      setError('Microphone access denied');
+      // Start recording with 1000ms timeslice to ensure ondataavailable fires regularly
+      mediaRecorder.start(1000);
+      console.log('Recording started with stream:', stream.getAudioTracks().length, 'audio track(s)');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Recording error:', err);
+      setError(`Microphone access denied: ${errorMessage}`);
       setRecording(false);
     }
   };
@@ -138,6 +142,14 @@ export function useMicrophoneRecording(options: UseMicrophoneRecordingOptions = 
       mediaRecorder.onstop = async () => {
         setRecording(false);
         const completedBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType || 'audio/webm' });
+        
+        // Log blob size and chunk count for debugging
+        console.log('Recording stopped. Blob size:', completedBlob.size, 'bytes, chunks:', audioChunksRef.current.length);
+        
+        if (completedBlob.size === 0) {
+          console.warn('Warning: Recording blob is empty! This may indicate no audio was captured.');
+        }
+        
         mediaRecorder.stream.getTracks().forEach(track => track.stop());
 
         if (objectUrlRef.current) {

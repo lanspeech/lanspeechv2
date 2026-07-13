@@ -29,7 +29,7 @@ export default function Modal({ title, onClose, children, maxWidth = 'max-w-lg' 
           <h2 className="font-bold text-gray-900 text-lg">{title}</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 active:scale-90 transition-all"
+            className="w-12 h-12 md:w-8 md:h-8 rounded-full flex items-center justify-center hover:bg-gray-100 active:scale-90 transition-all flex-shrink-0 -mr-2"
           >
             <X size={18} className="text-gray-500" />
           </button>
