@@ -1,10 +1,11 @@
-import { useNavigate } from 'react-router-dom';
 import { Calendar, RefreshCw, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Button from '../components/ui/Button';
 
+// Update this with your actual Selar payment link
+const SELAR_RENEWAL_LINK = 'https://selar.com/xyzzz';
+
 export default function BillingExpired() {
-  const navigate = useNavigate();
   const { user } = useAuth();
 
   return (
@@ -12,7 +13,7 @@ export default function BillingExpired() {
       {/* Header */}
       <header className="bg-white border-b border-gray-100 px-4 sm:px-6 py-4">
         <button
-          onClick={() => navigate('/auth', { replace: true })}
+          onClick={() => window.location.href = '/auth'}
           className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-2"
         >
           <ArrowLeft size={16} />
@@ -39,8 +40,8 @@ export default function BillingExpired() {
             </p>
 
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 my-6 text-left">
-              <p className="text-sm text-gray-700 leading-relaxed">
-                Your subscription has expired. To continue practicing and accessing all LanSpeech features, please renew your subscription below.
+              <p className="text-sm text-gray-700 leading-relaxed font-semibold">
+                Your subscription has expired. Please renew to restore access.
               </p>
             </div>
 
@@ -68,14 +69,20 @@ export default function BillingExpired() {
           </div>
 
           {/* CTA Button */}
-          <Button
-            size="lg"
-            onClick={() => navigate('/pricing')}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-2 mb-4"
+          <a
+            href={SELAR_RENEWAL_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block"
           >
-            <RefreshCw size={18} />
-            Renew Subscription
-          </Button>
+            <Button
+              size="lg"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-2 mb-4"
+            >
+              <RefreshCw size={18} />
+              Renew Subscription
+            </Button>
+          </a>
 
           {/* Support link */}
           <p className="text-center text-xs text-gray-500">
