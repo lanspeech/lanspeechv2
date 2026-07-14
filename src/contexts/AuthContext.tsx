@@ -12,7 +12,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<string | null>;
   signUp: (email: string, password: string, name: string) => Promise<string | null>;
   signOut: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
+  refreshProfile: () => Promise<Profile | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -23,13 +23,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (uid: string) => {
+  const fetchProfile = async (uid: string): Promise<Profile | null> => {
     const { data } = await supabase
       .from('profiles')
       .select('*')
       .eq('user_id', uid)
       .maybeSingle();
-    setProfile(data ?? null);
+    const profileData = data ?? null;
+    setProfile(profileData);
+    return profileData;
   };
 
   useEffect(() => {
@@ -54,6 +56,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const handleWindowFocus = () => {
+      refreshProfile().catch((error) => {
+        console.error('Failed to refresh profile on focus:', error);
+      });
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    return () => window.removeEventListener('focus', handleWindowFocus);
+  }, [user]);
 
   const signIn = async (email: string, password: string): Promise<string | null> => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -80,7 +95,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await new Promise(r => setTimeout(r, 500)); // let trigger settle
       await supabase
         .from('profiles')
-        .upsert({ user_id: data.user.id, display_name: name }, { onConflict: 'user_id' });
+        .upsert(
+          { user_id: data.user.id, display_name: name, onboarding_required: true },
+          { onConflict: 'user_id' }
+        );
       await fetchProfile(data.user.id);
     }
     return null;
@@ -91,8 +109,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   };
 
-  const refreshProfile = async () => {
-    if (user) await fetchProfile(user.id);
+  const refreshProfile = async (): Promise<Profile | null> => {
+    if (!user) return null;
+    return fetchProfile(user.id);
   };
 
   return (

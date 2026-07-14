@@ -5,26 +5,25 @@ import { useAuth } from '../contexts/AuthContext';
 import Button from '../components/ui/Button';
 import { useState } from 'react';
 
+const SELAR_MONTHLY_LINK = import.meta.env.VITE_SELAR_MONTHLY_LINK ?? 'https://selar.com/66770127xq/?add_to_cart=1';
+const SELAR_ANNUAL_LINK = import.meta.env.VITE_SELAR_ANNUAL_LINK ?? 'https://selar.com/71t6q0g732/?add_to_cart=1';
+
 export default function Pricing() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
-  const handleSelectPlan = async (planId: string) => {
+  const handleSelectPlan = (planId: string) => {
     setLoadingPlan(planId);
-    
-    // In a real app, this would:
-    // 1. Call a backend API to create a payment link via Selar
-    // 2. Redirect to Selar checkout
-    // For now, we'll show a message
-    console.log(`Selected plan: ${planId}`);
-    
-    // Simulate API call
-    setTimeout(() => {
-      // In production: window.location.href = selarPaymentLink;
-      alert(`Plan selected: ${planId}\n\nRedirect to Selar payment would happen here.\n\nUser: ${user?.email}`);
+    const selarLink = planId === 'monthly' ? SELAR_MONTHLY_LINK : SELAR_ANNUAL_LINK;
+
+    if (!selarLink) {
+      alert('Payment link is not configured. Please contact support.');
       setLoadingPlan(null);
-    }, 1000);
+      return;
+    }
+
+    window.location.href = selarLink;
   };
 
   const isSubscribed = profile?.subscription_expires_at !== null;
@@ -99,13 +98,10 @@ export default function Pricing() {
                 {/* CTA Button */}
                 <Button
                   size="lg"
+                  variant="primary"
                   onClick={() => handleSelectPlan(plan.id)}
                   disabled={loadingPlan === plan.id}
-                  className={`w-full mb-8 ${
-                    plan.popular
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                      : 'bg-gray-100 hover:bg-gray-200 text-gray-900'
-                  } ${loadingPlan === plan.id ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  className={`w-full mb-8 ${loadingPlan === plan.id ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
                   {loadingPlan === plan.id ? (
                     <div className="flex items-center justify-center gap-2">

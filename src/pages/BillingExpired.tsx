@@ -1,4 +1,6 @@
-import { Calendar, RefreshCw, ArrowLeft, Zap, Check } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Calendar, RefreshCw, ArrowLeft, Zap, Check, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Button from '../components/ui/Button';
 
@@ -7,7 +9,43 @@ const SELAR_MONTHLY_LINK = 'https://selar.com/66770127xq/?add_to_cart=1';
 const SELAR_ANNUAL_LINK = 'https://selar.com/71t6q0g732/?add_to_cart=1';
 
 export default function BillingExpired() {
-  const { user } = useAuth();
+  const { user, profile, refreshProfile, signOut } = useAuth();
+  const navigate = useNavigate();
+  const [checking, setChecking] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!profile) return;
+
+    if (!profile?.is_admin && profile.onboarding_required) {
+      navigate('/onboarding', { replace: true });
+      return;
+    }
+
+    if (profile?.is_admin) {
+      navigate('/admin', { replace: true });
+      return;
+    }
+
+    if (profile?.subscription_expires_at && new Date(profile.subscription_expires_at) > new Date()) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [profile, navigate]);
+
+  const handleRefreshSubscription = async () => {
+    setChecking(true);
+    setMessage('Checking payment status...');
+
+    const refreshedProfile = await refreshProfile();
+    if (refreshedProfile?.subscription_expires_at && new Date(refreshedProfile.subscription_expires_at) > new Date()) {
+      setMessage('Great news — your subscription is active again. Redirecting to your dashboard...');
+      navigate('/dashboard', { replace: true });
+      return;
+    }
+
+    setMessage('No active subscription was detected yet. If you recently paid, please wait a minute and try again.');
+    setChecking(false);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-slate-100">
@@ -42,6 +80,50 @@ export default function BillingExpired() {
             <p className="text-sm text-gray-600 mt-3">
               Choose from our flexible plans and get back to your speech therapy practice immediately.
             </p>
+            <div className="mt-6 space-y-3">
+              <p className="text-sm text-gray-600">
+                If you just completed payment, click the button below to refresh your subscription status.
+              </p>
+              {message && (
+                <p className="text-sm text-emerald-700 font-medium">{message}</p>
+              )}
+              <Button
+                size="md"
+                onClick={handleRefreshSubscription}
+                disabled={checking}
+                className="w-full max-w-xs mx-auto"
+              >
+                {checking ? 'Checking status…' : 'Check payment status'}
+              </Button>
+              <div className="pt-3 space-y-3">
+                <a
+                  href="https://wa.me/your-whatsapp-number"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center w-full max-w-xs mx-auto rounded-2xl border border-emerald-600 bg-white px-4 py-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+                >
+                  Contact Support on WhatsApp
+                </a>
+                <a
+                  href="mailto:info@lanspeech.com"
+                  className="inline-flex items-center justify-center w-full max-w-xs mx-auto rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+                >
+                  Email info@lanspeech.com
+                </a>
+                <Button
+                  size="md"
+                  variant="secondary"
+                  onClick={async () => {
+                    await signOut();
+                    navigate('/auth', { replace: true });
+                  }}
+                  className="w-full max-w-xs mx-auto"
+                >
+                  <LogOut size={16} className="mr-2" />
+                  Logout
+                </Button>
+              </div>
+            </div>
           </div>
 
           {/* Pricing cards */}
@@ -83,7 +165,7 @@ export default function BillingExpired() {
               >
                 <Button
                   size="lg"
-                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-900 flex items-center justify-center gap-2"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-2"
                 >
                   <RefreshCw size={18} />
                   Renew Monthly

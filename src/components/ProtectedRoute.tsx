@@ -14,15 +14,21 @@ interface ProtectedRouteProps {
  */
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const navigate = useNavigate();
-  const { loading } = useAuth();
+  const { loading, profile } = useAuth();
   const { isActive } = useSubscription();
+  const onboardingPending = profile?.onboarding_required === true;
 
   useEffect(() => {
-    // Only check after auth loading is complete
-    if (!loading && !isActive) {
+    if (!loading && onboardingPending) {
+      navigate('/onboarding', { replace: true });
+    }
+  }, [loading, onboardingPending, navigate]);
+
+  useEffect(() => {
+    if (!loading && !onboardingPending && !isActive) {
       navigate('/billing-expired', { replace: true });
     }
-  }, [loading, isActive, navigate]);
+  }, [loading, onboardingPending, isActive, navigate]);
 
   // Show loading state while checking subscription
   if (loading) {

@@ -30,6 +30,8 @@ export default function Admin() {
   const [editLevel, setEditLevel] = useState<LessonLevel>('beginner');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmToggleAdmin, setConfirmToggleAdmin] = useState<{ user_id: string; current: boolean } | null>(null);
+  const [grantModal, setGrantModal] = useState<{ profile: Profile; days: number } | null>(null);
+  const [grantLoading, setGrantLoading] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -175,16 +177,27 @@ export default function Admin() {
             {isLoading ? <div>Loading…</div> : (
               <div className="space-y-3">
                 {profiles.map(p => (
-                  <div key={p.user_id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div key={p.user_id} className="flex flex-col gap-3 p-3 border rounded-lg sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <div className="font-medium">{p.display_name} {p.is_admin ? <span className="text-xs text-emerald-600 font-medium">(admin)</span> : null}</div>
                       <div className="text-xs text-gray-500">Daily goal: {p.daily_goal_mins}m</div>
+                      <div className="text-xs text-gray-500">
+                        Access: {p.subscription_expires_at ? new Date(p.subscription_expires_at).toLocaleDateString() : 'None'}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button onClick={() => setConfirmToggleAdmin({ user_id: p.user_id, current: Boolean(p.is_admin) })} className="px-3 py-1 rounded-full border text-sm">
                         {p.is_admin ? 'Revoke Admin' : 'Promote'}
                       </button>
-                      <button className="px-3 py-1 rounded-full border text-sm">View</button>
+                      <button onClick={() => setGrantModal({ profile: p, days: 30 })} className="px-3 py-1 rounded-full border text-sm">
+                        Grant Access
+                      </button>
+                      <button onClick={async () => {
+                        const { data, error } = await supabase.from('profiles').update({ subscription_expires_at: null }).eq('user_id', p.user_id).select().single();
+                        if (!error && data) setProfiles(profiles.map(x => x.user_id === p.user_id ? (data as Profile) : x));
+                      }} className="px-3 py-1 rounded-full border text-sm text-red-600">
+                        Revoke Access
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -238,6 +251,49 @@ export default function Admin() {
                 className="btn-duolingo-primary px-4 py-2 rounded"
               >Confirm</button>
               <button onClick={() => setConfirmToggleAdmin(null)} className="px-4 py-2 rounded border">Cancel</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {grantModal && (
+        <Modal title={`Grant Access to ${grantModal.profile.display_name}`} onClose={() => setGrantModal(null)}>
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-gray-600">Enter the number of days of access to grant this user. Their subscription will expire automatically after this period.</p>
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium text-gray-700">Days</label>
+              <input
+                type="number"
+                min={1}
+                value={grantModal.days}
+                onChange={(event) => setGrantModal({ ...grantModal, days: Number(event.target.value) })}
+                className="border p-2 rounded w-24"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  if (!grantModal) return;
+                  setGrantLoading(true);
+                  const expiresAt = new Date();
+                  expiresAt.setDate(expiresAt.getDate() + grantModal.days);
+                  const { data, error } = await supabase
+                    .from('profiles')
+                    .update({ subscription_expires_at: expiresAt.toISOString() })
+                    .eq('user_id', grantModal.profile.user_id)
+                    .select()
+                    .single();
+                  setGrantLoading(false);
+                  if (!error && data) {
+                    setProfiles(profiles.map(x => x.user_id === data.user_id ? (data as Profile) : x));
+                    setGrantModal(null);
+                  }
+                }}
+                className="btn-duolingo-primary px-4 py-2 rounded"
+                disabled={grantLoading}
+              >
+                {grantLoading ? 'Granting…' : 'Grant Access'}
+              </button>
+              <button onClick={() => setGrantModal(null)} className="px-4 py-2 rounded border">Cancel</button>
             </div>
           </div>
         </Modal>

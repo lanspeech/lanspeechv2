@@ -16,9 +16,10 @@ export function useSubscription(): UseSubscriptionResult {
   const { profile } = useAuth();
   
   const subscriptionExpiresAt = profile?.subscription_expires_at ?? null;
-  const isActive = isSubscriptionActive(subscriptionExpiresAt);
-  const isExpired = subscriptionExpiresAt !== null && !isActive;
-  const daysRemaining = getDaysRemaining(subscriptionExpiresAt);
+  const isAdmin = profile?.is_admin === true;
+  const isActive = isAdmin || isSubscriptionActive(subscriptionExpiresAt);
+  const isExpired = !isAdmin && subscriptionExpiresAt !== null && !isActive;
+  const daysRemaining = isAdmin ? null : getDaysRemaining(subscriptionExpiresAt);
 
   return {
     isActive,

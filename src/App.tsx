@@ -14,6 +14,8 @@ import Completion from './pages/Completion';
 import DebugRecord from './pages/DebugRecord';
 import BillingExpired from './pages/BillingExpired';
 import Pricing from './pages/Pricing';
+import Onboarding from './pages/Onboarding';
+import NotFound from './pages/NotFound';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { fetchLessonById, fetchNextLesson } from './lib/lessons';
 import type { Lesson as LessonType } from './lib/types';
@@ -198,6 +200,7 @@ function AppInner() {
       />
       <Route path="/billing-expired" element={<BillingExpired />} />
       <Route path="/pricing" element={<Pricing />} />
+      <Route path="/onboarding" element={<Onboarding />} />
       <Route
         path="/"
         element={
@@ -226,7 +229,7 @@ function AppInner() {
           <CompletionRoute />
         </ProtectedRoute>
       } />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }

@@ -115,55 +115,136 @@ const expiresAt = calculateSubscriptionExpiration('annual');
 
 ### Backend Webhook Handler
 
-Create a backend endpoint to handle Selar webhooks (pseudo-code):
+The app needs a backend endpoint to receive payment success events and update `profiles.subscription_expires_at` in Supabase.
 
-```typescript
-// POST /api/webhooks/selar
-export async function handleSelarWebhook(req: Request) {
-  const signature = req.headers['x-selar-signature'];
-  
-  // Verify webhook signature
-  if (!verifySelarSignature(req.body, signature)) {
-    return { error: 'Invalid signature' };
+You can deploy this as a Supabase Edge Function or any serverless endpoint.
+
+#### Example Supabase Edge Function
+
+Create `supabase/functions/selar-webhook/index.ts` with the following logic:
+
+```ts
+import { serve } from 'https://deno.land/std@0.203.0/http/server.ts';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const WEBHOOK_SECRET = Deno.env.get('SELAR_WEBHOOK_SECRET');
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.');
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+function verifySignature(payload: string, signature: string | null): boolean {
+  if (!WEBHOOK_SECRET || !signature) return false;
+  return signature === WEBHOOK_SECRET;
+}
+
+function getDurationDays(productId: string | null): number {
+  if (!productId) return 30;
+  return productId.toLowerCase().includes('annual') ? 365 : 30;
+}
+
+serve(async (req) => {
+  if (req.method !== 'POST') {
+    return new Response('Method not allowed', { status: 405 });
   }
 
-  const { customer_email, reference, product_id } = req.body;
+  const signature = req.headers.get('x-selar-signature');
+  const bodyText = await req.text();
 
-  // Determine subscription duration based on product
-  let durationDays = 30; // default monthly
-  if (product_id === 'ANNUAL_PLAN_ID') {
-    durationDays = 365;
+  if (!verifySignature(bodyText, signature)) {
+    return new Response('Invalid signature', { status: 401 });
   }
 
-  // Calculate expiration
+  let payload;
+  try {
+    payload = JSON.parse(bodyText);
+  } catch (error) {
+    return new Response('Invalid JSON body', { status: 400 });
+  }
+
+  const email = payload.customer_email ?? payload.email ?? payload.customerEmail;
+  const productId = payload.product_id ?? payload.plan ?? payload.product;
+  const paymentStatus = payload.payment_status ?? payload.status ?? 'paid';
+
+  if (!email) {
+    return new Response('Missing customer email', { status: 400 });
+  }
+
+  if (paymentStatus !== 'paid' && paymentStatus !== 'successful') {
+    return new Response(JSON.stringify({ skipped: true }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
+
+  const { data: user, error: userError } = await supabase.auth.admin.getUserByEmail(email);
+  if (userError || !user) {
+    return new Response('User not found', { status: 404 });
+  }
+
+  const durationDays = getDurationDays(String(productId));
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + durationDays);
 
-  // Update user's subscription in Supabase
-  const { error } = await supabase
+  const { error: updateError } = await supabase
     .from('profiles')
-    .update({
-      subscription_expires_at: expiresAt.toISOString(),
-    })
-    .eq('user_id', getUserIdByEmail(customer_email));
+    .update({ subscription_expires_at: expiresAt.toISOString() })
+    .eq('user_id', user.id);
 
-  if (error) {
-    console.error('Failed to update subscription:', error);
-    return { error: 'Failed to update subscription' };
+  if (updateError) {
+    return new Response(`Failed to update subscription: ${updateError.message}`, { status: 500 });
   }
 
-  return { success: true };
+  return new Response(JSON.stringify({ success: true, expires_at: expiresAt.toISOString() }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+});
+```
+
+#### Zapier configuration
+
+If you are using Zapier, send a POST from your payment trigger to this endpoint with JSON payload like:
+
+```json
+{
+  "customer_email": "splendourkalu0@gmail.com",
+  "product_id": "monthly",
+  "payment_status": "paid"
 }
 ```
 
-### Environment Variables
+Configure Zapier to include:
+- `customer_email` or `email`
+- `product_id` or `plan`
+- `payment_status`
+
+Use an additional header for your webhook secret, for example:
+- `x-selar-signature: <your webhook secret>`
+
+#### Environment Variables
 
 Add to `.env`:
-```
+```bash
 VITE_SELAR_MONTHLY_LINK=https://selar.co/checkout/...
 VITE_SELAR_ANNUAL_LINK=https://selar.co/checkout/...
 SELAR_WEBHOOK_SECRET=your_webhook_secret_here
+SUPABASE_URL=https://your-supabase-url.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
+
+> The `SUPABASE_SERVICE_ROLE_KEY` must be kept secret and is only used by the webhook backend.
+
+### Zapier-compatible fallback
+
+If you cannot deploy a backend endpoint yet, use Zapier's Supabase integration to update `profiles.subscription_expires_at` directly:
+1. Add a Zap that triggers on successful payment.
+2. Add a Supabase action to update the `profiles` row for the user.
+3. Use the user's email to look up their `user_id` or map the row by a dedicated `email` field.
+4. Set `subscription_expires_at` to `{{zap_meta_human_now}} + 30 days` for monthly or `+ 365 days` for annual.
+
+This ensures successful payments immediately restore access in the frontend.
 
 ## Testing
 

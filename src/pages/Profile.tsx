@@ -271,7 +271,7 @@ function AccountSettingsPanel({
   user: { id: string } | null;
   onSaved: (msg: string) => void;
   onError: (msg: string) => void;
-  onRefresh: () => Promise<void>;
+  onRefresh: () => Promise<unknown>;
 }) {
   const [dailyGoal, setDailyGoal] = useState(profile?.daily_goal_mins ?? 20);
   const [newPw, setNewPw] = useState('');

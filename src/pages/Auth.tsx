@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Leaf, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Auth() {
+  const navigate = useNavigate();
   const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
@@ -24,7 +26,11 @@ export default function Auth() {
         if (!name.trim()) { setError('Please enter your name.'); setLoading(false); return; }
         err = await signUp(email, password, name.trim());
       }
-      if (err) setError(err);
+      if (err) {
+        setError(err);
+      } else {
+        navigate(mode === 'login' ? '/dashboard' : '/onboarding', { replace: true });
+      }
     } finally {
       setLoading(false);
     }
